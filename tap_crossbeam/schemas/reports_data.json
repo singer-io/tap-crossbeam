@@ -1,0 +1,117 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "master_id": {
+      "type": [
+        "string"
+      ]
+    },
+    "record_name": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "source_id": {
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
+    "overlap_time": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "format": "date-time"
+    },
+    "partner_org_ids": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": [
+          "integer"
+        ]
+      }
+    },
+    "partner_population_ids": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": [
+          "integer"
+        ]
+      }
+    },
+    "population_ids": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": [
+          "integer"
+        ]
+      }
+    },
+    "data": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": [
+          "object"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "source_id": {
+            "type": [
+              "integer"
+            ]
+          },
+          "source_field_id": {
+            "type": [
+              "integer"
+            ]
+          },
+          "organization_id": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "display_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "value": {
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "population_ids": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": [
+                "integer"
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}
