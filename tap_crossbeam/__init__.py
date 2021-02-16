@@ -19,8 +19,7 @@ REQUIRED_CONFIG_KEYS = [
 def do_discover(client):
     LOGGER.info('Testing authentication')
     try:
-        pass
-        ## TODO: auth testing
+        client.get('/v0.1/users/me')
     except:
         raise Exception('Error could not authenticate with Crossbeam')
 

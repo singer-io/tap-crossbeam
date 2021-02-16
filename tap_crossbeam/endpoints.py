@@ -28,5 +28,18 @@ ENDPOINTS_CONFIG = {
                 }
             }
         }
+    },
+    'threads': {
+        'path': '/v0.1/threads',
+        'pk': ['id'],
+        'provides': {
+            'thread_id': ['id']
+        },
+        'children': {
+            'thread_timelines': {
+                'path': '/v0.1/threads/{thread_id}/timeline',
+                'pk': ['id']
+            }
+        }
     }
 }
