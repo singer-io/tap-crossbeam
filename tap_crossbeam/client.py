@@ -46,7 +46,8 @@ class CrossbeamClient(object):
                 'client_secret': self.__client_secret,
                 'refresh_token': self.__refresh_token,
                 'grant_type': 'refresh_token'
-            })
+            },
+            skip_auth=True)
 
         self.__access_token = data['access_token']
         self.__refresh_token = data['refresh_token']
@@ -74,14 +75,14 @@ class CrossbeamClient(object):
                 method,
                 path=None,
                 url=None,
+                skip_auth=False,
                 **kwargs):
         if 'headers' not in kwargs:
             kwargs['headers'] = {}
 
-        if path and not self.__access_token:
-            self.refresh_access_token()
-
-        if path:
+        if not skip_auth:
+            if not self.__access_token:
+                self.refresh_access_token()
             kwargs['headers']['Authorization'] = 'Bearer {}'.format(self.__access_token)
             kwargs['headers']['Xbeam-Organization'] = self.__org_id
 
