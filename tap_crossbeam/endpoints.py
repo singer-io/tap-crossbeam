@@ -4,10 +4,10 @@ ENDPOINTS_CONFIG = {
         'path': '/v0.1/partner-populations',
         'pk': ['id']
     },
-    # partner_orgs? proposals? proposals_received?
     'partners': {
         'path': '/v0.1/partners',
-        'pk': ['id']
+        'pk': ['id'],
+        'data_key': 'partner_orgs'
     },
     'populations': {
         'path': '/v0.1/populations',

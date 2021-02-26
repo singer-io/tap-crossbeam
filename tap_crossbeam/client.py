@@ -1,3 +1,6 @@
+import json
+from datetime import datetime, timedelta
+
 import backoff
 import requests
 import singer
@@ -12,20 +15,51 @@ class Server5xxError(Exception):
 
 class CrossbeamClient(object):
     DEFAULT_BASE_URL = 'https://api.getcrossbeam.com'
+    DEFAULT_AUTH_BASE_URL = 'https://auth.getcrossbeam.com'
 
-    def __init__(self, config):
+    def __init__(self, config, config_path):
         self.__user_agent = config.get('user_agent')
         self.__org_id = config.get('org_id')
-        self.__access_token = config.get('access_token')
+        self.__client_id = config.get('client_id')
+        self.__client_secret = config.get('client_secret')
+        self.__refresh_token = config.get('refresh_token')
         self.__base_url = config.get('base_url', self.DEFAULT_BASE_URL)
+        self.__auth_base_url = config.get('auth_base_url', self.DEFAULT_AUTH_BASE_URL)
+        self.__config_path = config_path
 
         self.__session = requests.Session()
+        self.__access_token = None
+        self.__expires_at = None
 
     def __enter__(self):
         return self
 
     def __exit__(self, type, value, traceback):
         self.__session.close()
+
+    def refresh_access_token(self):
+        data = self.request(
+            'POST',
+            url='{}/oauth/token'.format(self.__auth_base_url),
+            data={
+                'client_id': self.__client_id,
+                'client_secret': self.__client_secret,
+                'refresh_token': self.__refresh_token,
+                'grant_type': 'refresh_token'
+            })
+
+        self.__access_token = data['access_token']
+        self.__refresh_token = data['refresh_token']
+
+        self.__user_expires_at = datetime.utcnow() + \
+            timedelta(seconds=data['expires_in'] - 10) # pad by 10 seconds for clock drift
+
+        ## Update refresh token in config file
+        with open(self.__config_path) as file:
+            config = json.load(file)
+        config['refresh_token'] = self.__refresh_token
+        with open(self.__config_path, 'w') as file:
+            json.dump(config, file, indent=2)
 
     @backoff.on_exception(backoff.expo,
                           (Server5xxError,
@@ -44,8 +78,12 @@ class CrossbeamClient(object):
         if 'headers' not in kwargs:
             kwargs['headers'] = {}
 
-        kwargs['headers']['Authorization'] = 'Bearer {}'.format(self.__access_token)
-        kwargs['headers']['Xbeam-Organization'] = self.__org_id
+        if path and not self.__access_token:
+            self.refresh_access_token()
+
+        if path:
+            kwargs['headers']['Authorization'] = 'Bearer {}'.format(self.__access_token)
+            kwargs['headers']['Xbeam-Organization'] = self.__org_id
 
         if 'endpoint' in kwargs:
             endpoint = kwargs['endpoint']

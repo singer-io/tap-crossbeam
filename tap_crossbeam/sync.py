@@ -60,7 +60,7 @@ def sync_endpoint(client,
                               params=params,
                               endpoint=stream_name)
 
-        records = data.get('items')
+        records = data.get(endpoint.get('data_key', 'items'))
 
         if not records:
             return
