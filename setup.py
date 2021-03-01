@@ -8,6 +8,10 @@ setup(name='tap-crossbeam',
       classifiers=['Programming Language :: Python :: 3 :: Only'],
       py_modules=['tap_crossbeam'],
       install_requires=[
+          'backoff==1.8.0',
+          'ratelimit==2.2.1',
+          'requests==2.25.1',
+          'singer-python==5.10.0'
       ],
       entry_points='''
           [console_scripts]
