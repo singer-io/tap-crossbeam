@@ -14,8 +14,8 @@ class Server5xxError(Exception):
     pass
 
 class CrossbeamClient(object):
-    DEFAULT_BASE_URL = 'https://api.getcrossbeam.com'
-    DEFAULT_AUTH_BASE_URL = 'https://auth.getcrossbeam.com'
+    DEFAULT_BASE_URL = 'https://api.crossbeam.com'
+    DEFAULT_AUTH_BASE_URL = 'https://auth.crossbeam.com'
 
     def __init__(self, config, config_path):
         self.__user_agent = config.get('user_agent')
@@ -50,7 +50,6 @@ class CrossbeamClient(object):
             skip_auth=True)
 
         self.__access_token = data['access_token']
-        self.__refresh_token = data['refresh_token']
 
         self.__user_expires_at = datetime.utcnow() + \
             timedelta(seconds=data['expires_in'] - 10) # pad by 10 seconds for clock drift
@@ -84,7 +83,7 @@ class CrossbeamClient(object):
             if not self.__access_token:
                 self.refresh_access_token()
             kwargs['headers']['Authorization'] = 'Bearer {}'.format(self.__access_token)
-            kwargs['headers']['Xbeam-Organization'] = self.__org_id
+            kwargs['headers']['Xbeam-Organization'] = str(self.__org_id)
 
         if 'endpoint' in kwargs:
             endpoint = kwargs['endpoint']
@@ -105,7 +104,7 @@ class CrossbeamClient(object):
         if response.status_code >= 500:
             raise Server5xxError()
 
-        response.raise_for_status()    
+        response.raise_for_status()
 
         return response.json()
 
