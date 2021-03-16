@@ -1,3 +1,5 @@
+import re
+
 import singer
 from singer import metrics, metadata, Transformer
 from singer.bookmarks import set_currently_syncing
@@ -115,6 +117,54 @@ def get_required_streams(endpoints, selected_stream_names):
                 required_streams += child_required_streams
     return required_streams
 
+def normalize_name(name):
+    return re.sub(r'[^a-z0-9\_]', '_', name.lower())
+
+def sync_report_data(client):
+    # fetch list of partners
+    partners_response = client.request('GET',
+                                       path='/v0.1/partners',
+                                       endpoint='partners')
+    print(partners_response)
+
+    # create lookup of partner ID to partner name
+    partner_lookup = {}
+    for partner in partners_response['partner_orgs']:
+        partner_lookup[partner['id']] = normalize_name(partner['name'])
+    print('!!!!!')
+    print(partner_lookup)
+
+    report_data = client.request('GET',
+                                 path='/v0.2/reports',
+                                 endpoint='reports')
+    for report in report_data['items']:
+        report_data_data = client.request(
+            'GET',
+            path='/v0.1/reports/{}/data'.format(report['id']),
+            endpoint='reports_data')
+
+        for report_row in report_data_data['items']:
+            row = {
+                'report_id': report['id']
+            }
+
+            for report_cell in report_row['data']:
+                column_name = '{}_{}'.format(
+                    partner_lookup[report_cell['organization_id']],
+                    normalize_name(report_cell['display_name']))
+                value = report_cell['value']
+                # if column_name in row and row[column_name] != value:
+                #     print('!!!!!! Value not equal: {} vs {}'.format(
+                #          row[column_name],
+                #          value))
+                if column_name in row:
+                    raise Exception('Duplicate column detected in report: {} -> {}'.format(
+                         report_cell['display_name'],
+                         column_name))
+                row[column_name] = value
+            print(row)
+
+
 def sync(client, config, catalog, state):
     if not catalog:
         catalog = discover()
@@ -128,16 +178,18 @@ def sync(client, config, catalog, state):
 
     required_streams = get_required_streams(ENDPOINTS_CONFIG, selected_stream_names)
 
-    for stream_name, endpoint in ENDPOINTS_CONFIG.items():
-        if stream_name in required_streams:
-            update_current_stream(state, stream_name)
-            sync_endpoint(client,
-                          catalog,
-                          state,
-                          required_streams,
-                          selected_stream_names,
-                          stream_name,
-                          endpoint,
-                          {})
+    sync_report_data(client)
 
-    update_current_stream(state)
+    # for stream_name, endpoint in ENDPOINTS_CONFIG.items():
+    #     if stream_name in required_streams:
+    #         update_current_stream(state, stream_name)
+    #         sync_endpoint(client,
+    #                       catalog,
+    #                       state,
+    #                       required_streams,
+    #                       selected_stream_names,
+    #                       stream_name,
+    #                       endpoint,
+    #                       {})
+
+    # update_current_stream(state)

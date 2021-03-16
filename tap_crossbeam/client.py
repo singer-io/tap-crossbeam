@@ -105,7 +105,7 @@ class CrossbeamClient(object):
         if response.status_code >= 500:
             raise Server5xxError()
 
-        response.raise_for_status()    
+        response.raise_for_status()  
 
         return response.json()
 
