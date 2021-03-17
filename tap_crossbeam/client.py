@@ -19,7 +19,7 @@ class CrossbeamClient(object):
 
     def __init__(self, config, config_path):
         self.__user_agent = config.get('user_agent')
-        self.__org_id = config.get('org_id')
+        self.__organization_uuid = config.get('organization_uuid')
         self.__client_id = config.get('client_id')
         self.__client_secret = config.get('client_secret')
         self.__refresh_token = config.get('refresh_token')
@@ -83,7 +83,7 @@ class CrossbeamClient(object):
             if not self.__access_token:
                 self.refresh_access_token()
             kwargs['headers']['Authorization'] = 'Bearer {}'.format(self.__access_token)
-            kwargs['headers']['Xbeam-Organization'] = str(self.__org_id)
+            kwargs['headers']['Xbeam-Organization'] = self.__organization_uuid
 
         if 'endpoint' in kwargs:
             endpoint = kwargs['endpoint']
