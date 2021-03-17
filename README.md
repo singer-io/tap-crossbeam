@@ -24,7 +24,7 @@ Follow the [OAuth steps](https://developers.crossbeam.com/#authentication) to cr
 
 ```json
 {
-  "org_id": <ACCOUNT_ID>,
+  "organization_uuid": <ORGANIZATION_UUID>,
   "client_id": <CLIENT_ID>,
   "client_secret": <CLIENT_SECRET>,
   "refresh_token": <REFRESH_TOKEN>
