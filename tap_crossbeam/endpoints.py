@@ -21,7 +21,7 @@ ENDPOINTS_CONFIG = {
         },
         'children': {
             'reports_data': {
-                'path': '/v0.1/reports/{report_id}/data',
+                'path': '/v0.2/reports/{report_id}/data',
                 'pk': ['master_id'],
                 'params': {
                     'limit': 100

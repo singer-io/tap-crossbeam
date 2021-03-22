@@ -100,8 +100,8 @@ def sync_endpoint(client,
         url = nested_get(data, ['pagination', 'next_href'])
         path = None
 
-def update_current_stream(state, stream_name=None):  
-    set_currently_syncing(state, stream_name) 
+def update_current_stream(state, stream_name=None):
+    set_currently_syncing(state, stream_name)
     singer.write_state(state)
 
 def get_required_streams(endpoints, selected_stream_names):
@@ -130,39 +130,31 @@ def sync_report_data(client):
     # create lookup of partner ID to partner name
     partner_lookup = {}
     for partner in partners_response['partner_orgs']:
-        partner_lookup[partner['id']] = normalize_name(partner['name'])
-    print('!!!!!')
-    print(partner_lookup)
+        partner_lookup[partner['id']] = partner['name']
 
-    report_data = client.request('GET',
-                                 path='/v0.2/reports',
-                                 endpoint='reports')
-    for report in report_data['items']:
-        report_data_data = client.request(
-            'GET',
-            path='/v0.1/reports/{}/data'.format(report['id']),
-            endpoint='reports_data')
+    record_matches = client.request(
+        'GET',
+        path='/v0.1/partner-records',
+        endpoint='partner_records')
 
-        for report_row in report_data_data['items']:
-            row = {
-                'report_id': report['id']
-            }
-
-            for report_cell in report_row['data']:
-                column_name = '{}_{}'.format(
-                    partner_lookup[report_cell['organization_id']],
-                    normalize_name(report_cell['display_name']))
-                value = report_cell['value']
-                # if column_name in row and row[column_name] != value:
-                #     print('!!!!!! Value not equal: {} vs {}'.format(
-                #          row[column_name],
-                #          value))
-                if column_name in row:
-                    raise Exception('Duplicate column detected in report: {} -> {}'.format(
-                         report_cell['display_name'],
-                         column_name))
-                row[column_name] = value
-            print(row)
+    for item in record_matches['items']:
+        # separate the accounts and leads into different streams?
+        # id_key = "_lead_id" if item["master"]["mdm_type"] == "lead" else "_account_id"
+        id_key = "_record_id"
+        output = {
+            id_key: item["master_id"],
+            "_partner_organization_id": item["partner_organization_id"],
+            "_partner_name": partner_lookup[item["partner_organization_id"]],
+        }
+        for k, v in item["partner_master"]["top_level"].items():
+            if k.startswith("_xb_"):
+                continue
+            output[normalize_name(k)] = v
+        for k, v in item["partner_master"]["owner"].items():
+            if k.startswith("_xb_"):
+                continue
+            output[normalize_name("Owner " + k)] = v
+        print(output)
 
 
 def sync(client, config, catalog, state):
