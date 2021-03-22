@@ -4,6 +4,10 @@ ENDPOINTS_CONFIG = {
         'path': '/v0.1/partner-populations',
         'pk': ['id']
     },
+    'partner_records': {
+        'path': '/v0.1/partner-records',
+        'pk': ['_partner_organization_id', '_partner_record_id'],
+    },
     'partners': {
         'path': '/v0.1/partners',
         'pk': ['id'],
@@ -19,15 +23,6 @@ ENDPOINTS_CONFIG = {
         'provides': {
             'report_id': ['id']
         },
-        'children': {
-            'reports_data': {
-                'path': '/v0.2/reports/{report_id}/data',
-                'pk': ['master_id'],
-                'params': {
-                    'limit': 100
-                }
-            }
-        }
     },
     'threads': {
         'path': '/v0.1/threads',

@@ -120,25 +120,22 @@ def get_required_streams(endpoints, selected_stream_names):
 def normalize_name(name):
     return re.sub(r'[^a-z0-9\_]', '_', name.lower())
 
-def sync_report_data(client):
-    # fetch list of partners
+def sync_partner_records(client):
     partners_response = client.request('GET',
                                        path='/v0.1/partners',
                                        endpoint='partners')
-    print(partners_response)
-
-    # create lookup of partner ID to partner name
     partner_lookup = {}
     for partner in partners_response['partner_orgs']:
         partner_lookup[partner['id']] = partner['name']
 
-    record_matches = client.request(
+    partner_records = client.request(
         'GET',
         path='/v0.1/partner-records',
         endpoint='partner_records')
 
-    for item in record_matches['items']:
+    for item in partner_records['items']:
         # separate the accounts and leads into different streams?
+        # No longer returning `master`, so not sure how to determine the type
         # id_key = "_lead_id" if item["master"]["mdm_type"] == "lead" else "_account_id"
         id_key = "_record_id"
         output = {
@@ -170,7 +167,7 @@ def sync(client, config, catalog, state):
 
     required_streams = get_required_streams(ENDPOINTS_CONFIG, selected_stream_names)
 
-    sync_report_data(client)
+    sync_partner_records(client)
 
     # for stream_name, endpoint in ENDPOINTS_CONFIG.items():
     #     if stream_name in required_streams:
