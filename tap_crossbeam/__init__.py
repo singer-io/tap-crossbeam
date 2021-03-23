@@ -14,6 +14,7 @@ from tap_crossbeam.sync import sync
 LOGGER = singer.get_logger()
 
 REQUIRED_CONFIG_KEYS = [
+    'organization_uuid'
 ]
 
 def do_discover(client):

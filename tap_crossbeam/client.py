@@ -54,13 +54,6 @@ class CrossbeamClient(object):
         self.__user_expires_at = datetime.utcnow() + \
             timedelta(seconds=data['expires_in'] - 10) # pad by 10 seconds for clock drift
 
-        ## Update refresh token in config file
-        with open(self.__config_path) as file:
-            config = json.load(file)
-        config['refresh_token'] = self.__refresh_token
-        with open(self.__config_path, 'w') as file:
-            json.dump(config, file, indent=2)
-
     @backoff.on_exception(backoff.expo,
                           (Server5xxError,
                            RateLimitException,

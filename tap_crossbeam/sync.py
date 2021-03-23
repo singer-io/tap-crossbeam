@@ -120,7 +120,13 @@ def get_required_streams(endpoints, selected_stream_names):
 def normalize_name(name):
     return re.sub(r'[^a-z0-9\_]', '_', name.lower())
 
-def sync_partner_records(client):
+def sync_partner_records(client, state):
+    schema = None
+    id_key = "_record_id"
+    stream_name = 'partner_records'
+
+    update_current_stream(state, stream_name)
+
     partners_response = client.request('GET',
                                        path='/v0.1/partners',
                                        endpoint='partners')
@@ -128,31 +134,75 @@ def sync_partner_records(client):
     for partner in partners_response['partner_orgs']:
         partner_lookup[partner['id']] = partner['name']
 
-    partner_records = client.request(
-        'GET',
-        path='/v0.1/partner-records',
-        endpoint='partner_records')
+    url = None
+    path = '/v0.1/partner-records'
+    while path or url:
+        LOGGER.info('{} - Syncing: {}'.format(
+                stream_name,
+                path or url))
 
-    for item in partner_records['items']:
-        # separate the accounts and leads into different streams?
-        # No longer returning `master`, so not sure how to determine the type
-        # id_key = "_lead_id" if item["master"]["mdm_type"] == "lead" else "_account_id"
-        id_key = "_record_id"
-        output = {
-            id_key: item["master_id"],
-            "_partner_organization_id": item["partner_organization_id"],
-            "_partner_name": partner_lookup[item["partner_organization_id"]],
-        }
-        for k, v in item["partner_master"]["top_level"].items():
-            if k.startswith("_xb_"):
-                continue
-            output[normalize_name(k)] = v
-        for k, v in item["partner_master"]["owner"].items():
-            if k.startswith("_xb_"):
-                continue
-            output[normalize_name("Owner " + k)] = v
-        print(output)
+        partner_records = client.request(
+            'GET',
+            path=path,
+            url=url,
+            endpoint=stream_name)
 
+        field_names = set()
+        page_records = []
+        for item in partner_records['items']:
+            # separate the accounts and leads into different streams?
+            # No longer returning `master`, so not sure how to determine the type
+            # id_key = "_lead_id" if item["master"]["mdm_type"] == "lead" else "_account_id"
+            output = {
+                id_key: item["master_id"],
+                "_partner_organization_id": item["partner_organization_id"],
+                "_partner_name": partner_lookup[item["partner_organization_id"]],
+            }
+            for k, v in item["partner_master"]["top_level"].items():
+                if k.startswith("_xb_"):
+                    continue
+                output[normalize_name(k)] = v
+            for k, v in item["partner_master"]["owner"].items():
+                if k.startswith("_xb_"):
+                    continue
+                output[normalize_name("Owner " + k)] = v
+
+            page_records.append(output)
+
+            if not schema:
+                field_names = field_names.union(set(output.keys()))
+
+        if not schema:
+            properties = {}
+            for field_name in field_names:
+                properties[field_name] = {
+                    'type': [
+                        'null',
+                        'string'
+                    ]
+                }
+
+            schema = {
+                'type': 'object',
+                'additionalProperties': False,
+                'properties': properties
+            }
+
+            singer.write_schema(stream_name, schema, ['_partner_organization_id', id_key])
+
+            schema_written = True
+
+        with metrics.record_counter(stream_name) as counter:
+            with Transformer() as transformer:
+                for record in page_records:
+                    record_typed = transformer.transform(record,
+                                                         schema,
+                                                         [])
+                    singer.write_record(stream_name, record_typed)
+                    counter.increment()
+
+        url = nested_get(partner_records, ['pagination', 'next_href'])
+        path = None
 
 def sync(client, config, catalog, state):
     if not catalog:
@@ -167,18 +217,18 @@ def sync(client, config, catalog, state):
 
     required_streams = get_required_streams(ENDPOINTS_CONFIG, selected_stream_names)
 
-    sync_partner_records(client)
+    for stream_name, endpoint in ENDPOINTS_CONFIG.items():
+        if stream_name in required_streams:
+            update_current_stream(state, stream_name)
+            sync_endpoint(client,
+                          catalog,
+                          state,
+                          required_streams,
+                          selected_stream_names,
+                          stream_name,
+                          endpoint,
+                          {})
 
-    # for stream_name, endpoint in ENDPOINTS_CONFIG.items():
-    #     if stream_name in required_streams:
-    #         update_current_stream(state, stream_name)
-    #         sync_endpoint(client,
-    #                       catalog,
-    #                       state,
-    #                       required_streams,
-    #                       selected_stream_names,
-    #                       stream_name,
-    #                       endpoint,
-    #                       {})
+    sync_partner_records(client, state)
 
-    # update_current_stream(state)
+    update_current_stream(state)
