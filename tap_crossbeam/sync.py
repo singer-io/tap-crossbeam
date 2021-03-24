@@ -135,7 +135,7 @@ def sync_partner_records(client, state):
         partner_lookup[partner['id']] = partner['name']
 
     url = None
-    path = '/v0.1/partner-records'
+    path = '/v0.1/partner-records?limit=1000'
     while path or url:
         LOGGER.info('{} - Syncing: {}'.format(
                 stream_name,
