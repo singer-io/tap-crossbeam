@@ -212,7 +212,7 @@ def sync_partner_records(client, state):
         ]
         if first_page:
             schema = _partner_records_schema(page_records)
-            singer.write_schema(stream_name, schema, ['_partner_crossbeam_id'])
+            singer.write_schema(stream_name, schema, ['_crossbeam_id', '_partner_crossbeam_id'])
             first_page = False
         _partner_records_metrics(stream_name, schema, page_records)
         url = nested_get(partner_records, ['pagination', 'next_href'])
