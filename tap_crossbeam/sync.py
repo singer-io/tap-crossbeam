@@ -121,8 +121,66 @@ def normalize_name(name):
     return re.sub(r'[^a-z0-9\_]', '_', name.lower())
 
 
-def _partner_records_schema(page_records):
+def _records_schema(page_records):
+    field_names = set()
+    for output in page_records:
+        field_names = field_names.union(set(output.keys()))
     properties = {}
+    for field_name in field_names:
+        properties[field_name] = {'type': ['null', 'string']}
+    return {
+        'type': 'object',
+        'additionalProperties': False,
+        'properties': properties
+    }
+
+
+def _convert_record_item(item):
+    with open("item.json", "w") as fp:
+        import json
+        json.dump(item, fp=fp)
+    output = {
+        '_record_id': item['record_id'],
+        '_crossbeam_id': item['crossbeam_id'],
+        '_updated_at': item['updated_at'],
+    }
+    for k, v in (item['master']['top_level'] or {}).items():
+        output[normalize_name(k)] = v
+    for k, v in (item['master']['owner'] or {}).items():
+        output[normalize_name('Owner ' + k)] = v
+    return output
+
+
+def sync_records(client, state):
+    first_page = True
+    schema = None
+    stream_name = 'records'
+    update_current_stream(state, stream_name)
+    url = None
+    path = '/v0.1/records?limit=1000'
+    while path or url:
+        LOGGER.info('{} - Syncing: {}'.format(
+                stream_name,
+                path or url))
+        records = client.request(
+            'GET',
+            path=path,
+            url=url,
+            endpoint=stream_name)
+        page_records = [
+            _convert_record_item(item)
+            for item in records['items']
+        ]
+        if first_page:
+            schema = _records_schema(page_records)
+            singer.write_schema(stream_name, schema, ['_crossbeam_id'])
+            first_page = False
+        _write_metrics(stream_name, schema, page_records)
+        url = nested_get(records, ['pagination', 'next_href'])
+        path = None
+
+
+def _partner_records_schema(page_records):
     field_names = set()
     for output in page_records:
         field_names = field_names.union(set(output.keys()))
@@ -133,6 +191,7 @@ def _partner_records_schema(page_records):
         '_partner_population_ids': {'type': 'array', 'items': {'type': 'integer'}},
         '_partner_population_names': {'type': 'array', 'items': {'type': 'string'}},
     }
+    properties = {}
     for field_name in field_names:
         properties[field_name] = fixed_types.get(field_name, {'type': ['null', 'string']})
     return {
@@ -157,18 +216,14 @@ def _convert_partner_record_item(item, partner_lookup):
         '_partner_population_ids': [x['id'] for x in item['partner_populations']],
         '_partner_population_names': [x['name'] for x in item['partner_populations']],
     }
-    for k, v in item['partner_master']['top_level'].items():
-        if k.startswith('_xb_'):
-            continue
+    for k, v in (item['partner_master']['top_level'] or {}).items():
         output[normalize_name(k)] = v
-    for k, v in item['partner_master']['owner'].items():
-        if k.startswith('_xb_'):
-            continue
+    for k, v in (item['partner_master']['owner'] or {}).items():
         output[normalize_name('Owner ' + k)] = v
     return output
 
 
-def _partner_records_metrics(stream_name, schema, page_records):
+def _write_metrics(stream_name, schema, page_records):
     with metrics.record_counter(stream_name) as counter:
         with Transformer() as transformer:
             for record in page_records:
@@ -214,7 +269,7 @@ def sync_partner_records(client, state):
             schema = _partner_records_schema(page_records)
             singer.write_schema(stream_name, schema, ['_crossbeam_id', '_partner_crossbeam_id'])
             first_page = False
-        _partner_records_metrics(stream_name, schema, page_records)
+        _write_metrics(stream_name, schema, page_records)
         url = nested_get(partner_records, ['pagination', 'next_href'])
         path = None
 
@@ -243,6 +298,7 @@ def sync(client, config, catalog, state):
                           endpoint,
                           {})
 
+    sync_records(client, state)
     sync_partner_records(client, state)
 
     update_current_stream(state)
