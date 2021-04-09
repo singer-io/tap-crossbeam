@@ -135,7 +135,7 @@ def _records_schema(page_records):
     }
 
 
-def _convert_record_item(item):
+def _convert_record_item(item, schema):
     with open("item.json", "w") as fp:
         import json
         json.dump(item, fp=fp)
@@ -145,8 +145,12 @@ def _convert_record_item(item):
         '_updated_at': item['updated_at'],
     }
     for k, v in (item['master']['top_level'] or {}).items():
+        if schema and k not in schema['properties']:
+            continue
         output[normalize_name(k)] = v
     for k, v in (item['master']['owner'] or {}).items():
+        if schema and k not in schema['properties']:
+            continue
         output[normalize_name('Owner ' + k)] = v
     return output
 
@@ -168,7 +172,7 @@ def sync_records(client, state):
             url=url,
             endpoint=stream_name)
         page_records = [
-            _convert_record_item(item)
+            _convert_record_item(item, schema)
             for item in records['items']
         ]
         if first_page:
@@ -201,7 +205,7 @@ def _partner_records_schema(page_records):
     }
 
 
-def _convert_partner_record_item(item, partner_lookup):
+def _convert_partner_record_item(item, partner_lookup, schema):
     # separate the accounts and leads into different streams?
     # No longer returning `master`, so not sure how to determine the type
     # id_key = '_lead_id' if item['master']['mdm_type'] == 'lead' else '_account_id'
@@ -217,8 +221,12 @@ def _convert_partner_record_item(item, partner_lookup):
         '_partner_population_names': [x['name'] for x in item['partner_populations']],
     }
     for k, v in (item['partner_master']['top_level'] or {}).items():
+        if schema and k not in schema['properties']:
+            continue
         output[normalize_name(k)] = v
     for k, v in (item['partner_master']['owner'] or {}).items():
+        if schema and k not in schema['properties']:
+            continue
         output[normalize_name('Owner ' + k)] = v
     return output
 
@@ -262,7 +270,7 @@ def sync_partner_records(client, state):
             url=url,
             endpoint=stream_name)
         page_records = [
-            _convert_partner_record_item(item, partner_lookup)
+            _convert_partner_record_item(item, partner_lookup, schema)
             for item in partner_records['items']
         ]
         if first_page:
