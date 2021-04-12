@@ -30,3 +30,7 @@ Follow the [OAuth steps](https://developers.crossbeam.com/#authentication) to cr
   "refresh_token": <REFRESH_TOKEN>
 }
 ```
+
+---
+
+Copyright &copy; 2021 Stitch
