@@ -60,7 +60,147 @@ def get_schemas():
 
     return SCHEMAS, FIELD_METADATA
 
-def discover():
+def get_schema_from_source(streams, source):
+    stream_name = source['mdm_type']
+    existing_schema = streams.get(stream_name)
+
+    if existing_schema:
+        properties = existing_schema['properties']
+        metadata = existing_schema['metadata']
+    else:
+        properties = {
+            '__xb_crossbeam_id': {
+                'type': [
+                    'string'
+                ]
+            },
+            '__xb_record_id': {
+                'type': [
+                    'string'
+                ]
+            },
+            '__xb_record_type': {
+                'type': [
+                    'string'
+                ]
+            },
+            '__xb_record_name': {
+                'type': [
+                    'null',
+                    'string'
+                ]
+            },
+            '__xb_updated_at': {
+                'type': [
+                    'null',
+                    'string'
+                ],
+                'format': 'date-time'
+            }
+        }
+        metadata = {
+            '__table__': {
+                'tap-crossbeam.is_partner_data': True,
+                'tap-crossbeam.schema': source['schema'],
+                'tap-crossbeam.table': source['table'],
+                'tap-crossbeam.mdm_type': source['mdm_type']
+            }
+        }
+
+    for field in source['fields']:
+        field_name = field['column']
+
+        cb_type = field['data_type']
+        cb_pg_type = field['pg_data_type']
+
+        json_type = 'string'
+        json_format = None
+
+        if cb_type == 'datetime':
+            json_format = 'date-time'
+        elif cb_type == 'number':
+            if cb_pg_type == 'bigint':
+                json_type = 'integer'
+            else:
+                json_type = 'number'
+        elif cb_type == 'boolean':
+            json_type = 'boolean'
+
+        if field_name in properties:
+            if json_type not in properties[field_name]['type']:
+                properties[field_name]['type'].append(json_type)
+
+            if field['display_name'] not in metadata[field_name]['tap-crossbeam.display_names']:
+                metadata[field_name]['tap-crossbeam.display_names'].append(field['display_name'])
+
+            if field['nickname'] not in metadata[field_name]['tap-crossbeam.nicknames']:
+                metadata[field_name]['tap-crossbeam.nicknames'].append(field['nickname'])
+        else:
+            json_schema = {
+                'type': [
+                    'null',
+                    json_type
+                ]
+            }
+
+            if json_format:
+                json_schema['format'] = json_format
+
+            properties[field_name] = json_schema
+            metadata[field_name] = {
+                'inclusion': 'available',
+                'tap-crossbeam.display_names': [field['display_name']],
+                'tap-crossbeam.nicknames': [field['nickname']]
+            }
+    
+    if not existing_schema:
+        streams[stream_name] = {
+            'properties': properties,
+            'metadata': metadata
+        }
+
+# this function iterates over all sources and creates a table per mdm_type
+# an mdm_type may come from multiple sources
+def get_partner_data_schemas(client):
+    streams = {}
+
+    path = '/v0.1/sources'
+    next_href = None
+    while path or next_href:
+        data = client.get(path, url=next_href, endpoint='sources')
+        for source in data['items']:
+            get_schema_from_source(streams, source)
+
+        path = None
+        next_href = data.get('pagination', {}).get('next_href')
+
+    # turn streams from a compact representation to singer rep
+    singer_streams = {}
+    for stream_name, data in streams.items():
+        schema = {
+            'type': 'object',
+            'additionalProperties': False,
+            'properties': data['properties']
+        }
+        metadata = []
+        for prop, meta in data['metadata'].items():
+            if prop == '__table__':
+                breadcrumb = []
+            else:
+                breadcrumb = ['properties', prop]
+            metadata.append(
+                {
+                    'breadcrumb': breadcrumb,
+                    'metadata': meta
+                }
+            )
+        singer_streams[stream_name] = {
+            'schema': schema,
+            'metadata': metadata
+        }
+    return singer_streams
+
+def discover(client):
     schemas, field_metadata = get_schemas()
     catalog = Catalog([])
 
@@ -73,6 +213,19 @@ def discover():
             stream=stream_name,
             tap_stream_id=stream_name,
             key_properties=pk,
+            schema=schema,
+            metadata=metadata
+        ))
+
+    partner_singer_streams = get_partner_data_schemas(client)
+    for stream_name, data in partner_singer_streams.items():
+        schema = Schema.from_dict(data['schema'])
+        metadata = data['metadata']
+
+        catalog.streams.append(CatalogEntry(
+            stream=stream_name,
+            tap_stream_id=stream_name,
+            key_properties=['__xb_crossbeam_id'],
             schema=schema,
             metadata=metadata
         ))

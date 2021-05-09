@@ -204,9 +204,76 @@ def sync_partner_records(client, state):
         url = nested_get(partner_records, ['pagination', 'next_href'])
         path = None
 
+CROSSBEAM_FIELDS_MAP = {
+    '__xb_crossbeam_id': 'crossbeam_id',
+    '__xb_record_id': 'record_id',
+    '__xb_record_type': 'record_type',
+    '__xb_record_name': 'record_name',
+    '__xb_updated_at': 'updated_at'
+}
+
+MDM_MAP = {
+    'company': 'account',
+    'person': 'lead'
+}
+
+def sync_partner_records(client, catalog, state):
+    md_type_lookup = {}
+    for stream in catalog.streams:
+        mdata = metadata.to_map(stream.metadata)
+        table_mdata = mdata.get(tuple())
+        if table_mdata and table_mdata.get('tap-crossbeam.is_partner_data', False):
+            display_name_lookup = {}
+
+            for breadcrumb, meta in mdata.items():
+                for display_name in meta.get('tap-crossbeam.display_names', []):
+                    display_name_lookup[display_name] = breadcrumb[1]
+                for nickname in meta.get('tap-crossbeam.nicknames', []):
+                    display_name_lookup[nickname] = breadcrumb[1]
+
+            md_type_lookup[table_mdata['tap-crossbeam.mdm_type']] = {
+                'stream_name': stream.stream,
+                'metadata': mdata,
+                'schema': stream.schema.to_dict(),
+                'display_name_lookup': display_name_lookup
+            }
+
+    path = '/v0.1/records'
+    next_href = None
+    while path or next_href:
+        data = client.get(path, url=next_href, endpoint='sources')
+        for raw_record in data['items']:
+            record = {}
+            correction = MDM_MAP[raw_record['record_type']]
+            stream_lookup = md_type_lookup[correction or raw_record['record_type']]
+            for display_name, value in raw_record['master']['top_level'].items():
+                field_name = stream_lookup['display_name_lookup'].get(display_name)
+                if not field_name:
+                    LOGGER.warning('"{}" not found'.format(display_name))
+                else:
+                    record[field_name] = value
+
+            for singer_field, crossbeam_field in CROSSBEAM_FIELDS_MAP.items():
+                record[singer_field] = raw_record[crossbeam_field]
+
+            with Transformer() as transformer:
+                record_typed = transformer.transform(record,
+                                                     stream_lookup['schema'],
+                                                     stream_lookup['metadata'])
+                singer.write_record(stream_lookup['stream_name'], record_typed)
+
+        path = None
+        next_href = data.get('pagination', {}).get('next_href')
+
 def sync(client, config, catalog, state):
+    data = client.get('/v0.1/partner-records')
+
+    print(data)
+
+    return
+
     if not catalog:
-        catalog = discover()
+        catalog = discover(client)
         selected_streams = catalog.streams
     else:
         selected_streams = catalog.get_selected_streams(state)
@@ -217,18 +284,23 @@ def sync(client, config, catalog, state):
 
     required_streams = get_required_streams(ENDPOINTS_CONFIG, selected_stream_names)
 
-    for stream_name, endpoint in ENDPOINTS_CONFIG.items():
-        if stream_name in required_streams:
-            update_current_stream(state, stream_name)
-            sync_endpoint(client,
-                          catalog,
-                          state,
-                          required_streams,
-                          selected_stream_names,
-                          stream_name,
-                          endpoint,
-                          {})
+    # for stream_name, endpoint in ENDPOINTS_CONFIG.items():
+    #     if stream_name in required_streams:
+    #          ## TODO: check if partner data stream
+    #         update_current_stream(state, stream_name)
+    #         sync_endpoint(client,
+    #                       catalog,
+    #                       state,
+    #                       required_streams,
+    #                       selected_stream_names,
+    #                       stream_name,
+    #                       endpoint,
+    #                       {})
 
-    sync_partner_records(client, state)
+    ## TODO: check required_streams
+
+    # partner data streams are interlaced, so we just call this stage partner_data
+    update_current_stream(state, 'partner_data')
+    sync_partner_records(client, catalog, state)
 
     update_current_stream(state)
