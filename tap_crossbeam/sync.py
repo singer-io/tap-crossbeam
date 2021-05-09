@@ -217,7 +217,7 @@ MDM_MAP = {
     'person': 'lead'
 }
 
-def sync_partner_records(client, catalog, state):
+def sync_records(client, catalog, required_streams):
     md_type_lookup = {}
     for stream in catalog.streams:
         mdata = metadata.to_map(stream.metadata)
@@ -235,17 +235,29 @@ def sync_partner_records(client, catalog, state):
                 'stream_name': stream.stream,
                 'metadata': mdata,
                 'schema': stream.schema.to_dict(),
-                'display_name_lookup': display_name_lookup
+                'stream': stream,
+                'display_name_lookup': display_name_lookup,
+                'schema_written': False
             }
 
     path = '/v0.1/records'
     next_href = None
     while path or next_href:
-        data = client.get(path, url=next_href, endpoint='sources')
+        LOGGER.info('records - Fetching {}'.format(path or next_href))
+        data = client.get(path, url=next_href, endpoint='records')
         for raw_record in data['items']:
             record = {}
             correction = MDM_MAP[raw_record['record_type']]
             stream_lookup = md_type_lookup[correction or raw_record['record_type']]
+            stream_name = stream_lookup['stream_name']
+
+            if stream_name not in required_streams:
+                continue
+
+            if not stream_lookup['schema_written']:
+                write_schema(stream)
+                stream_lookup['schema_written'] = True
+
             for display_name, value in raw_record['master']['top_level'].items():
                 field_name = stream_lookup['display_name_lookup'].get(display_name)
                 if not field_name:
@@ -260,18 +272,12 @@ def sync_partner_records(client, catalog, state):
                 record_typed = transformer.transform(record,
                                                      stream_lookup['schema'],
                                                      stream_lookup['metadata'])
-                singer.write_record(stream_lookup['stream_name'], record_typed)
+                singer.write_record(stream_name, record_typed)
 
         path = None
         next_href = data.get('pagination', {}).get('next_href')
 
 def sync(client, config, catalog, state):
-    data = client.get('/v0.1/partner-records')
-
-    print(data)
-
-    return
-
     if not catalog:
         catalog = discover(client)
         selected_streams = catalog.streams
@@ -282,25 +288,22 @@ def sync(client, config, catalog, state):
     for selected_stream in selected_streams:
         selected_stream_names.append(selected_stream.tap_stream_id)
 
-    required_streams = get_required_streams(ENDPOINTS_CONFIG, selected_stream_names)
+    required_endpoint_streams = get_required_streams(ENDPOINTS_CONFIG, selected_stream_names)
 
-    # for stream_name, endpoint in ENDPOINTS_CONFIG.items():
-    #     if stream_name in required_streams:
-    #          ## TODO: check if partner data stream
-    #         update_current_stream(state, stream_name)
-    #         sync_endpoint(client,
-    #                       catalog,
-    #                       state,
-    #                       required_streams,
-    #                       selected_stream_names,
-    #                       stream_name,
-    #                       endpoint,
-    #                       {})
+    for stream_name, endpoint in ENDPOINTS_CONFIG.items():
+        if stream_name in required_endpoint_streams:
+            update_current_stream(state, stream_name)
+            sync_endpoint(client,
+                          catalog,
+                          state,
+                          required_endpoint_streams,
+                          selected_stream_names,
+                          stream_name,
+                          endpoint,
+                          {})
 
-    ## TODO: check required_streams
-
-    # partner data streams are interlaced, so we just call this stage partner_data
-    update_current_stream(state, 'partner_data')
-    sync_partner_records(client, catalog, state)
+    # records data streams are interlaced, so we just call this stage "records"
+    update_current_stream(state, 'records')
+    sync_records(client, catalog, selected_stream_names)
 
     update_current_stream(state)
