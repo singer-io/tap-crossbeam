@@ -26,6 +26,7 @@ class CrossbeamClient(object):
         self.__base_url = config.get('base_url', self.DEFAULT_BASE_URL)
         self.__auth_base_url = config.get('auth_base_url', self.DEFAULT_AUTH_BASE_URL)
         self.__config_path = config_path
+        self.__verify_ssl_certs = config.get('verify_ssl_certs', True)
 
         self.__session = requests.Session()
         self.__access_token = None
@@ -86,6 +87,8 @@ class CrossbeamClient(object):
 
         if self.__user_agent:
             kwargs['headers']['User-Agent'] = self.__user_agent
+
+        kwargs['verify'] = self.__verify_ssl_certs
 
         if not url:
             url = self.__base_url + path

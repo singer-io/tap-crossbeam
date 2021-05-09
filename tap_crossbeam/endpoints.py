@@ -4,10 +4,6 @@ ENDPOINTS_CONFIG = {
         'path': '/v0.1/partner-populations',
         'pk': ['id']
     },
-    # 'partner_records': {
-    #     'path': '/v0.1/partner-records',
-    #     'pk': ['_partner_organization_id', '_partner_record_id'],
-    # },
     'partners': {
         'path': '/v0.1/partners',
         'pk': ['id'],
