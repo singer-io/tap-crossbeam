@@ -122,7 +122,7 @@ def normalize_name(name):
 
 def sync_partner_records(client, state):
     schema = None
-    id_key = "_record_id"
+    id_key = '__xb_crossbeam_id'
     stream_name = 'partner_records'
 
     update_current_stream(state, stream_name)
@@ -154,7 +154,7 @@ def sync_partner_records(client, state):
             # No longer returning `master`, so not sure how to determine the type
             # id_key = "_lead_id" if item["master"]["mdm_type"] == "lead" else "_account_id"
             output = {
-                id_key: item["master_id"],
+                id_key: item['partner_crossbeam_id'],
                 "_partner_organization_id": item["partner_organization_id"],
                 "_partner_name": partner_lookup[item["partner_organization_id"]],
             }
@@ -305,5 +305,7 @@ def sync(client, config, catalog, state):
     # records data streams are interlaced, so we just call this stage "records"
     update_current_stream(state, 'records')
     sync_records(client, catalog, selected_stream_names)
+
+    sync_partner_records(client, state)
 
     update_current_stream(state)
