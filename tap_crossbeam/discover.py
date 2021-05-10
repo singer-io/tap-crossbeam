@@ -79,43 +79,32 @@ def _field_jschema_type(field):
 
 def _add_fields_to_properties(properties, source):
     for field in source['fields']:
-        field_name = field['column']  # FIXME this should just use display name
+        column_name = field['display_name']
         json_type, json_format = _field_jschema_type(field)
-        if field_name in properties:
-            if json_type not in properties[field_name]['type']:
-                properties[field_name]['type'].append(json_type)
+        if column_name in properties:
+            if json_type not in properties[column_name]['type']:
+                properties[column_name]['type'].append(json_type)
         else:
             json_schema = {'type': ['null', json_type]}
             if json_format:
                 json_schema['format'] = json_format
-            properties[field_name] = json_schema
+            properties[column_name] = json_schema
 
 
 def _add_fields_to_metadata(metadata, source):
     for field in source['fields']:
-        field_name = field['column']  # FIXME this should just use display name
-        if field_name in metadata:
-            if field['display_name'] not in metadata[field_name]['tap-crossbeam.display_names']:
-                metadata[field_name]['tap-crossbeam.display_names'].append(field['display_name'])
-            # if field['nickname'] not in metadata[field_name]['tap-crossbeam.nicknames']:
-            #     metadata[field_name]['tap-crossbeam.nicknames'].append(field['nickname'])
-        else:
-            metadata[field_name] = {
-                'inclusion': 'available',
-                'tap-crossbeam.display_names': [field['display_name']],
-                # 'tap-crossbeam.nicknames': [field['nickname']]
-            }
+        column_name = field['display_name']
+        if column_name not in metadata:
+            metadata[column_name] = {'inclusion': 'available'}
 
 
 def get_schema_from_source(streams, source):
     stream_name = source['mdm_type']
     streams[stream_name] = streams.get(stream_name) or {
         'properties': {
-            '__xb_crossbeam_id': {'type': ['string']},
-            '__xb_record_id': {'type': ['string']},
-            '__xb_record_type': {'type': ['string']},
-            '__xb_record_name': {'type': ['null', 'string']},
-            '__xb_updated_at': {'type': ['null', 'string'], 'format': 'date-time'},
+            '_crossbeam_id': {'type': ['string']},
+            '_record_id': {'type': ['string']},
+            '_updated_at': {'type': ['null', 'string'], 'format': 'date-time'},
         },
         'metadata': {
             '__table__': {
@@ -197,7 +186,7 @@ def discover(client):
         catalog.streams.append(CatalogEntry(
             stream=stream_name,
             tap_stream_id=stream_name,
-            key_properties=['__xb_crossbeam_id'],
+            key_properties=['_crossbeam_id'],
             schema=schema,
             metadata=metadata
         ))
