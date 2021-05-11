@@ -98,7 +98,7 @@ def _add_fields_to_metadata(metadata, source):
             metadata[column_name] = {'inclusion': 'available'}
 
 
-def get_schema_from_source(streams, source):
+def _get_schema_from_source(streams, source):
     stream_name = source['mdm_type']
     streams[stream_name] = streams.get(stream_name) or {
         'properties': {
@@ -108,7 +108,6 @@ def get_schema_from_source(streams, source):
         },
         'metadata': {
             '__table__': {
-                'tap-crossbeam.is_partner_data': True,
                 'tap-crossbeam.schema': source['schema'],
                 'tap-crossbeam.table': source['table'],
                 'tap-crossbeam.mdm_type': source['mdm_type'],
@@ -121,7 +120,7 @@ def get_schema_from_source(streams, source):
 
 # this function iterates over all sources and creates a table per mdm_type
 # an mdm_type may come from multiple sources
-def get_partner_data_schemas(client):
+def _get_records_schemas(client):
     streams = {}
 
     path = '/v0.1/sources'
@@ -129,7 +128,7 @@ def get_partner_data_schemas(client):
     while path or next_href:
         data = client.get(path, url=next_href, endpoint='sources')
         for source in data['items']:
-            get_schema_from_source(streams, source)
+            _get_schema_from_source(streams, source)
 
         path = None
         next_href = data.get('pagination', {}).get('next_href')
@@ -169,7 +168,6 @@ def discover(client):
         schema = Schema.from_dict(schema_dict)
         pk = get_pk(stream_name)
         metadata = field_metadata[stream_name]
-
         catalog.streams.append(CatalogEntry(
             stream=stream_name,
             tap_stream_id=stream_name,
@@ -178,11 +176,10 @@ def discover(client):
             metadata=metadata
         ))
 
-    partner_singer_streams = get_partner_data_schemas(client)
-    for stream_name, data in partner_singer_streams.items():
+    records_singer_streams = _get_records_schemas(client)
+    for stream_name, data in records_singer_streams.items():
         schema = Schema.from_dict(data['schema'])
         metadata = data['metadata']
-
         catalog.streams.append(CatalogEntry(
             stream=stream_name,
             tap_stream_id=stream_name,

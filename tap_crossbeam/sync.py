@@ -223,6 +223,17 @@ MDM_MAP = {
     'company': 'account',
     'person': 'lead'
 }
+RECORDS_STREAMS = {"account", "user", "lead"}
+
+
+def _records_streams(catalog):
+    # For now this is returning a fixed list of things we care about. Later, it
+    # could be based on metadata found during discovery. See the parent to this
+    # commit: the is_partner_data metadata was previously used to flag streams
+    # (notably this metadata should be called something like
+    # 'is_records_stream' to remove the "partner" wording).
+    return [stream for stream in catalog.streams
+            if stream.stream in ["account", "user", "lead"]]
 
 
 def _meta_lookup(catalog):
@@ -230,26 +241,20 @@ def _meta_lookup(catalog):
     # metadata for that table. Most of the metadata comes right from the
     # discover code.
     lookup = {}
-    for stream in catalog.streams:
+    for stream in _records_streams(catalog):
         mdata = metadata.to_map(stream.metadata)
         table_mdata = mdata.get(tuple())
-        if table_mdata and table_mdata.get('tap-crossbeam.is_partner_data', False):
-            lookup[table_mdata['tap-crossbeam.mdm_type']] = {
-                'stream_name': stream.stream,
-                'metadata': mdata,
-                'schema': stream.schema.to_dict(),
-            }
+        lookup[table_mdata['tap-crossbeam.mdm_type']] = {
+            'stream_name': stream.stream,
+            'metadata': mdata,
+            'schema': stream.schema.to_dict(),
+        }
     return lookup
 
 
-def _write_record_schemas(catalog):
-    for stream in catalog.streams:
-        if stream.stream in ["account", "user", "lead"]:
-            write_schema(stream)
-
-
 def sync_records(client, catalog, required_streams):
-    _write_record_schemas(catalog)
+    for stream in _records_streams(catalog):
+        write_schema(stream)
     mdm_meta_lookup = _meta_lookup(catalog)
     path = '/v0.1/records?limit=1000'
     next_href = None
