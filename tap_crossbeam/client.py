@@ -106,3 +106,32 @@ class CrossbeamClient(object):
 
     def get(self, path, **kwargs):
         return self.request('GET', path=path, **kwargs)
+
+    def _yield_helper(self, path, endpoint, items_key='items'):
+        next_href = None
+        while path or next_href:
+            data = self.get(path, url=next_href, endpoint=endpoint)
+            # if endpoint == "data-shares":
+            #     print("ABC", json.dumps(data))
+            yield from data[items_key]
+            path = None
+            next_href = data.get('pagination', {}).get('next_href')
+
+    def yield_sources(self):
+        yield from self._yield_helper('/v0.1/sources', 'sources')
+
+    def yield_receiving_data_shares(self):
+        yield from self._yield_helper('/v0.1/data-shares', 'data-shares',
+                                      items_key='receiving_data_shares')
+
+    def yield_partner_shared_fields(self):
+        # Yep, for more specifics on that endpoint, for /partner-records
+        # fields, pull from /v0.1/data-shares , receiving_data_shares key.
+        # Within that, you will see a list of items, each of which has a
+        # shared_fields key. In there, pull all the display_name fields by
+        # mdm_type (same rules as for /records, lead and account map to
+        # top_level, user maps to owner, anything can be ignored). Do note that
+        # you will see a lot of duplicates here, so you’ll want to distinct
+        # these all together. This will be in prod in the next hour.
+        for data_share in self.yield_receiving_data_shares():
+            yield from data_share['shared_fields']
