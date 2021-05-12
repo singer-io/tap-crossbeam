@@ -126,19 +126,24 @@ def _partner_lookup(client):
     return partner_lookup
 
 
+def _stream_to_meta_and_stream(stream):
+    return {
+        'metadata': metadata.to_map(stream.metadata),
+        'stream': stream,
+        'schema': stream.schema.to_dict(),
+    }
+
+
 def _source_id_lookup(catalog):
     """Returns a mapping of source ids to the stream for that source."""
     lookup = {}
     for stream in catalog.streams:
-        mdata = metadata.to_map(stream.metadata)
+        meta_and_stream = _stream_to_meta_and_stream(stream)
+        mdata = meta_and_stream['metadata']
         table_mdata = mdata.get(tuple())
         if table_mdata and table_mdata.get('tap-crossbeam.source_ids'):
             for source_id in table_mdata['tap-crossbeam.source_ids']:
-                lookup[source_id] = {
-                    'metadata': mdata,
-                    'stream': stream,
-                    'schema': stream.schema.to_dict(),
-                }
+                lookup[source_id] = meta_and_stream
     return lookup
 
 
@@ -148,8 +153,9 @@ def sync_partner_records(client, catalog, required_streams):
             write_schema(stream)
     partner_lookup = _partner_lookup(client)
     source_id_lookup = _source_id_lookup(catalog)
+    user_stream = next(stream for stream in catalog.streams if stream.stream == 'partner_user')
+    user_mdmeta = _stream_to_meta_and_stream(user_stream)
     for raw_record in client.yield_partner_records():
-        record = {}
         mdmeta = source_id_lookup[raw_record['partner_source_id']]
         stream_name = mdmeta['stream'].stream
         if stream_name not in required_streams:
@@ -162,37 +168,55 @@ def sync_partner_records(client, catalog, required_streams):
             'partner_population_names': [x['name'] for x in raw_record['partner_populations']],
             **raw_record,
         }
+        record = {}
         for display_name, value in augmented_rec['partner_master']['top_level'].items():
             # FIXME only do this if the field is selected, right?
             record[normalize_name(display_name)] = value
-        # FIXME owner needs to be handled
         for field in PARTNER_RECORDS_STANDARD:
             record[field] = augmented_rec[field[1:]]
         with Transformer() as transformer:
             record_typed = transformer.transform(record, mdmeta['schema'], mdmeta['metadata'])
             singer.write_record(stream_name, record_typed)
+        if 'owner' in raw_record['partner_master']:
+            _write_owner(raw_record, user_mdmeta, 'partner_master')
+
+
+def _write_owner(raw_record, user_mdmeta, master_key):
+    record = {}
+    for display_name, value in raw_record[master_key]['owner'].items():
+        # FIXME only do this if the field is selected, right?
+        record[normalize_name(display_name)] = value
+    # for field in RECORDS_STANDARD:
+    #     record[field] = raw_record[field[1:]]
+    with Transformer() as transformer:
+        record_typed = transformer.transform(
+            record, user_mdmeta['schema'], user_mdmeta['metadata'])
+        singer.write_record('user', record_typed)
 
 
 def sync_records(client, catalog, required_streams):
     for stream in catalog.streams:
         if stream.stream in ['account', 'user', 'lead']:
             write_schema(stream)
+    user_stream = next(stream for stream in catalog.streams if stream.stream == 'user')
+    user_mdmeta = _stream_to_meta_and_stream(user_stream)
     source_id_lookup = _source_id_lookup(catalog)
     for raw_record in client.yield_records():
-        record = {}
         mdmeta = source_id_lookup[raw_record['source_id']]
         stream_name = mdmeta['stream'].stream
         if stream_name not in required_streams:
             continue
+        record = {}
         for display_name, value in raw_record['master']['top_level'].items():
             # FIXME only do this if the field is selected, right?
             record[normalize_name(display_name)] = value
-        # FIXME owner needs to be handled
         for field in RECORDS_STANDARD:
             record[field] = raw_record[field[1:]]
         with Transformer() as transformer:
             record_typed = transformer.transform(record, mdmeta['schema'], mdmeta['metadata'])
             singer.write_record(stream_name, record_typed)
+        if 'owner' in raw_record['master']:
+            _write_owner(raw_record, user_mdmeta, 'master')
 
 
 def sync(client, _, catalog, state):
