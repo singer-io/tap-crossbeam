@@ -4,7 +4,12 @@ import singer
 from singer import metrics, metadata, Transformer
 from singer.bookmarks import set_currently_syncing
 
-from tap_crossbeam.discover import discover, RECORDS_STANDARD, PARTNER_RECORDS_STANDARD
+from tap_crossbeam.discover import (
+    RECORDS_STANDARD,
+    PARTNER_RECORDS_STANDARD,
+    discover,
+    normalize_name,
+)
 from tap_crossbeam.endpoints import ENDPOINTS_CONFIG
 
 LOGGER = singer.get_logger()
@@ -159,28 +164,13 @@ def sync_partner_records(client, catalog, required_streams):
         }
         for display_name, value in augmented_rec['partner_master']['top_level'].items():
             # FIXME only do this if the field is selected, right?
-            record[display_name] = value
+            record[normalize_name(display_name)] = value
         # FIXME owner needs to be handled
         for field in PARTNER_RECORDS_STANDARD:
             record[field] = augmented_rec[field[1:]]
         with Transformer() as transformer:
             record_typed = transformer.transform(record, mdmeta['schema'], mdmeta['metadata'])
             singer.write_record(stream_name, record_typed)
-
-
-def _meta_lookup(catalog):
-    """Returns a mapping of stream names to a dict containing 'metadata' and
-    'schema' for that stream."""
-    lookup = {}
-    for stream in catalog.streams:
-        mdata = metadata.to_map(stream.metadata)
-        table_mdata = mdata.get(tuple())
-        if table_mdata and table_mdata.get('tap-crossbeam.contains_records'):
-            lookup[stream.stream] = {
-                'metadata': mdata,
-                'schema': stream.schema.to_dict(),
-            }
-    return lookup
 
 
 def sync_records(client, catalog, required_streams):
@@ -196,7 +186,7 @@ def sync_records(client, catalog, required_streams):
             continue
         for display_name, value in raw_record['master']['top_level'].items():
             # FIXME only do this if the field is selected, right?
-            record[display_name] = value
+            record[normalize_name(display_name)] = value
         # FIXME owner needs to be handled
         for field in RECORDS_STANDARD:
             record[field] = raw_record[field[1:]]

@@ -1,4 +1,5 @@
 import os
+import re
 import json
 
 from singer.catalog import Catalog, CatalogEntry, Schema
@@ -28,24 +29,17 @@ def get_abs_path(path):
 
 def get_schemas():
     global SCHEMAS, FIELD_METADATA
-
     if SCHEMAS:
         return SCHEMAS, FIELD_METADATA
-
     schemas_path = get_abs_path('schemas')
-
     file_names = [f for f in os.listdir(schemas_path)
                   if os.path.isfile(os.path.join(schemas_path, f))]
-
     for file_name in file_names:
         stream_name = file_name[:-5]
         with open(os.path.join(schemas_path, file_name)) as data_file:
             schema = json.load(data_file)
-
         SCHEMAS[stream_name] = schema
-
         pk = get_pk(stream_name)
-
         metadata = []
         for prop, _ in schema['properties'].items():
             if prop in pk:
@@ -53,29 +47,31 @@ def get_schemas():
             else:
                 inclusion = 'available'
             metadata.append({
-                'metadata': {
-                    'inclusion': inclusion
-                },
-                'breadcrumb': ['properties', prop]
+                'metadata': {'inclusion': inclusion},
+                'breadcrumb': ['properties', prop],
             })
         FIELD_METADATA[stream_name] = metadata
-
     return SCHEMAS, FIELD_METADATA
 
 
 def _field_jschema_type(field):
-    cb_type = field['data_type']
-    if cb_type == 'datetime':
-        return ('string', 'date-time')
-    if cb_type == 'number':
-        return ('number', None)
-    if cb_type == 'boolean':
-        return ('boolean', None)
     return ('string', None)
+    # cb_type = field['data_type']
+    # if cb_type == 'datetime':
+    #     return ('string', 'date-time')
+    # if cb_type == 'number':
+    #     return ('number', None)
+    # if cb_type == 'boolean':
+    #     return ('boolean', None)
+    # return ('string', None)
+
+
+def normalize_name(name):
+    return re.sub(r'[^a-z0-9\_]', '_', name.lower())
 
 
 def _add_field_to_properties(stream, field):
-    column_name = field['display_name']
+    column_name = normalize_name(field['display_name'])
     json_type, json_format = _field_jschema_type(field)
     if column_name in stream['properties']:
         if json_type not in stream['properties'][column_name]['type']:
@@ -88,7 +84,7 @@ def _add_field_to_properties(stream, field):
 
 
 def _add_field_to_metadata(stream, field):
-    column_name = field['display_name']
+    column_name = normalize_name(field['display_name'])
     if column_name not in stream['metadata']:
         stream['metadata'][column_name] = {'inclusion': 'available'}
     source_id = field['source_id']
@@ -104,7 +100,6 @@ def _initialize_stream(streams, stream_name, item, default_columns, source_id_ke
         'properties': default_columns.copy(),
         'metadata': {
             '__table__': {
-                'tap-crossbeam.contains_records': True,
                 'tap-crossbeam.source_ids': [item[source_id_key]],
             }
         },
