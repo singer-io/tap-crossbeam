@@ -4,7 +4,7 @@ import singer
 from singer import metrics, metadata, Transformer
 from singer.bookmarks import set_currently_syncing
 
-from tap_crossbeam.discover import discover
+from tap_crossbeam.discover import discover, RECORDS_STANDARD, PARTNER_RECORDS_STANDARD
 from tap_crossbeam.endpoints import ENDPOINTS_CONFIG
 
 LOGGER = singer.get_logger()
@@ -104,66 +104,6 @@ def get_required_streams(endpoints, selected_stream_names):
     return required_streams
 
 
-def normalize_name(name):
-    return re.sub(r'[^a-z0-9\_]', '_', name.lower())
-
-
-def _convert_record_item(item):
-    output = {
-        '_record_id': item['record_id'],
-        '_crossbeam_id': item['crossbeam_id'],
-        '_updated_at': item['updated_at'],
-    }
-    for k, v in (item['master']['top_level'] or {}).items():
-        output[normalize_name(k)] = v
-    for k, v in (item['master']['owner'] or {}).items():
-        output[normalize_name('Owner ' + k)] = v
-    return output
-
-
-def _partner_records_schema(page_records):
-    field_names = set()
-    for output in page_records:
-        field_names = field_names.union(set(output.keys()))
-    fixed_types = {
-        '_partner_organization_id': {'type': 'integer'},
-        '_population_ids': {'type': 'array', 'items': {'type': 'integer'}},
-        '_population_names': {'type': 'array', 'items': {'type': 'string'}},
-        '_partner_population_ids': {'type': 'array', 'items': {'type': 'integer'}},
-        '_partner_population_names': {'type': 'array', 'items': {'type': 'string'}},
-    }
-    properties = {}
-    for field_name in field_names:
-        properties[field_name] = fixed_types.get(field_name, {'type': ['null', 'string']})
-    return {
-        'type': 'object',
-        'additionalProperties': False,
-        'properties': properties
-    }
-
-
-def _convert_partner_record_item(item, partner_lookup):
-    # separate the accounts and leads into different streams?
-    # No longer returning `master`, so not sure how to determine the type
-    # id_key = '_lead_id' if item['master']['mdm_type'] == 'lead' else '_account_id'
-    output = {
-        '_record_id': item['record_id'],
-        '_crossbeam_id': item['crossbeam_id'],
-        '_population_ids': [x['id'] for x in item['populations']],
-        '_population_names': [x['name'] for x in item['populations']],
-        '_partner_organization_id': item['partner_organization_id'],
-        '_partner_name': partner_lookup[item['partner_organization_id']],
-        '_partner_crossbeam_id': item['partner_crossbeam_id'],
-        '_partner_population_ids': [x['id'] for x in item['partner_populations']],
-        '_partner_population_names': [x['name'] for x in item['partner_populations']],
-    }
-    for k, v in (item['partner_master']['top_level'] or {}).items():
-        output[normalize_name(k)] = v
-    for k, v in (item['partner_master']['owner'] or {}).items():
-        output[normalize_name('Owner ' + k)] = v
-    return output
-
-
 def _write_records_and_metrics(stream_name, schema, page_records):
     with metrics.record_counter(stream_name) as counter:
         with Transformer() as transformer:
@@ -174,115 +114,95 @@ def _write_records_and_metrics(stream_name, schema, page_records):
 
 
 def _partner_lookup(client):
-    partners_response = client.request('GET',
-                                       path='/v0.1/partners',
-                                       endpoint='partners')
+    partners_response = client.request('GET', path='/v0.1/partners', endpoint='partners')
     partner_lookup = {}
     for partner in partners_response['partner_orgs']:
         partner_lookup[partner['id']] = partner['name']
     return partner_lookup
 
 
-def sync_partner_records(client, state):
-    first_page = True
-    schema = None
-    stream_name = 'partner_records'
-    update_current_stream(state, stream_name)
+def _source_id_lookup(catalog):
+    """Returns a mapping of source ids to the stream for that source."""
+    lookup = {}
+    for stream in catalog.streams:
+        mdata = metadata.to_map(stream.metadata)
+        table_mdata = mdata.get(tuple())
+        if table_mdata and table_mdata.get('tap-crossbeam.source_ids'):
+            for source_id in table_mdata['tap-crossbeam.source_ids']:
+                lookup[source_id] = {
+                    'metadata': mdata,
+                    'stream': stream,
+                    'schema': stream.schema.to_dict(),
+                }
+    return lookup
+
+
+def sync_partner_records(client, catalog, required_streams):
+    for stream in catalog.streams:
+        if stream.stream in ['partner_account', 'partner_user', 'partner_lead']:
+            write_schema(stream)
     partner_lookup = _partner_lookup(client)
-    url = None
-    path = '/v0.1/partner-records?limit=1000'
-    while path or url:
-        LOGGER.info('%s - Syncing: %s', stream_name, path or url)
-        partner_records = client.request(
-            'GET',
-            path=path,
-            url=url,
-            endpoint=stream_name)
-        page_records = [
-            _convert_partner_record_item(item, partner_lookup)
-            for item in partner_records['items']
-        ]
-        if first_page:
-            schema = _partner_records_schema(page_records)
-            singer.write_schema(stream_name, schema, ['_crossbeam_id', '_partner_crossbeam_id'])
-            first_page = False
-        _write_records_and_metrics(stream_name, schema, page_records)
-        url = nested_get(partner_records, ['pagination', 'next_href'])
-        path = None
-
-
-CROSSBEAM_FIELDS_MAP = {
-    '_crossbeam_id': 'crossbeam_id',
-    '_record_id': 'record_id',
-    '_updated_at': 'updated_at'
-}
-# FIXME there is the mapping from record_type to mdm type due to the /records
-# endpoint not returning the mdm_type in responses yet. This is being added, so
-# later we can just use the mdm_type from the data.
-MDM_MAP = {
-    'company': 'account',
-    'person': 'lead'
-}
-RECORDS_STREAMS = {"account", "user", "lead"}
-
-
-def _records_streams(catalog):
-    # For now this is returning a fixed list of things we care about. Later, it
-    # could be based on metadata found during discovery. See the parent to this
-    # commit: the is_partner_data metadata was previously used to flag streams
-    # (notably this metadata should be called something like
-    # 'is_records_stream' to remove the "partner" wording).
-    return [stream for stream in catalog.streams
-            if stream.stream in ["account", "user", "lead"]]
+    source_id_lookup = _source_id_lookup(catalog)
+    for raw_record in client.yield_partner_records():
+        record = {}
+        mdmeta = source_id_lookup[raw_record['partner_source_id']]
+        stream_name = mdmeta['stream'].stream
+        if stream_name not in required_streams:
+            continue
+        augmented_rec = {
+            'population_ids': [x['id'] for x in raw_record['populations']],
+            'population_names': [x['name'] for x in raw_record['populations']],
+            'partner_name': partner_lookup[raw_record['partner_organization_id']],
+            'partner_population_ids': [x['id'] for x in raw_record['partner_populations']],
+            'partner_population_names': [x['name'] for x in raw_record['partner_populations']],
+            **raw_record,
+        }
+        for display_name, value in augmented_rec['partner_master']['top_level'].items():
+            # FIXME only do this if the field is selected, right?
+            record[display_name] = value
+        # FIXME owner needs to be handled
+        for field in PARTNER_RECORDS_STANDARD:
+            record[field] = augmented_rec[field[1:]]
+        with Transformer() as transformer:
+            record_typed = transformer.transform(record, mdmeta['schema'], mdmeta['metadata'])
+            singer.write_record(stream_name, record_typed)
 
 
 def _meta_lookup(catalog):
-    # lookup will be a mapping from the mdm type (account, lead, user) to the
-    # metadata for that table. Most of the metadata comes right from the
-    # discover code.
+    """Returns a mapping of stream names to a dict containing 'metadata' and
+    'schema' for that stream."""
     lookup = {}
-    for stream in _records_streams(catalog):
+    for stream in catalog.streams:
         mdata = metadata.to_map(stream.metadata)
         table_mdata = mdata.get(tuple())
-        lookup[table_mdata['tap-crossbeam.mdm_type']] = {
-            'stream_name': stream.stream,
-            'metadata': mdata,
-            'schema': stream.schema.to_dict(),
-        }
+        if table_mdata and table_mdata.get('tap-crossbeam.contains_records'):
+            lookup[stream.stream] = {
+                'metadata': mdata,
+                'schema': stream.schema.to_dict(),
+            }
     return lookup
 
 
 def sync_records(client, catalog, required_streams):
-    for stream in _records_streams(catalog):
-        write_schema(stream)
-    mdm_meta_lookup = _meta_lookup(catalog)
-    path = '/v0.1/records?limit=1000'
-    next_href = None
-    while path or next_href:
-        LOGGER.info('records - Fetching %s', path or next_href)
-        data = client.get(path, url=next_href, endpoint='records')
-        for raw_record in data['items']:
-            record = {}
-            mdmeta = mdm_meta_lookup[MDM_MAP[raw_record['record_type']]]
-
-            if mdmeta['stream_name'] not in required_streams:
-                continue
-
-            for display_name, value in raw_record['master']['top_level'].items():
-                # FIXME only do this if the field is selected yes?
-                record[display_name] = value
-
-            # FIXME owner needs to be handled
-
-            for singer_field, crossbeam_field in CROSSBEAM_FIELDS_MAP.items():
-                record[singer_field] = raw_record[crossbeam_field]
-
-            with Transformer() as transformer:
-                record_typed = transformer.transform(record, mdmeta['schema'], mdmeta['metadata'])
-                singer.write_record(mdmeta['stream_name'], record_typed)
-
-        path = None
-        next_href = data.get('pagination', {}).get('next_href')
+    for stream in catalog.streams:
+        if stream.stream in ['account', 'user', 'lead']:
+            write_schema(stream)
+    source_id_lookup = _source_id_lookup(catalog)
+    for raw_record in client.yield_records():
+        record = {}
+        mdmeta = source_id_lookup[raw_record['source_id']]
+        stream_name = mdmeta['stream'].stream
+        if stream_name not in required_streams:
+            continue
+        for display_name, value in raw_record['master']['top_level'].items():
+            # FIXME only do this if the field is selected, right?
+            record[display_name] = value
+        # FIXME owner needs to be handled
+        for field in RECORDS_STANDARD:
+            record[field] = raw_record[field[1:]]
+        with Transformer() as transformer:
+            record_typed = transformer.transform(record, mdmeta['schema'], mdmeta['metadata'])
+            singer.write_record(stream_name, record_typed)
 
 
 def sync(client, _, catalog, state):
@@ -313,5 +233,5 @@ def sync(client, _, catalog, state):
     # records data streams are interlaced, so we just call this stage "records"
     update_current_stream(state, 'records')
     sync_records(client, catalog, selected_stream_names)
-    sync_partner_records(client, state)
+    sync_partner_records(client, catalog, selected_stream_names)
     update_current_stream(state)

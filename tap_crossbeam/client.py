@@ -107,12 +107,11 @@ class CrossbeamClient(object):
     def get(self, path, **kwargs):
         return self.request('GET', path=path, **kwargs)
 
-    def _yield_helper(self, path, endpoint, items_key='items'):
+    def _yield_helper(self, path, endpoint, *, items_key='items'):
         next_href = None
         while path or next_href:
+            LOGGER.debug('%s - Fetching %s', endpoint, path or next_href)
             data = self.get(path, url=next_href, endpoint=endpoint)
-            # if endpoint == "data-shares":
-            #     print("ABC", json.dumps(data))
             yield from data[items_key]
             path = None
             next_href = data.get('pagination', {}).get('next_href')
@@ -121,7 +120,7 @@ class CrossbeamClient(object):
         yield from self._yield_helper('/v0.1/sources', 'sources')
 
     def yield_receiving_data_shares(self):
-        yield from self._yield_helper('/v0.1/data-shares', 'data-shares',
+        yield from self._yield_helper('/v0.1/data-shares', 'data_shares',
                                       items_key='receiving_data_shares')
 
     def yield_partner_shared_fields(self):
@@ -135,3 +134,9 @@ class CrossbeamClient(object):
         # these all together. This will be in prod in the next hour.
         for data_share in self.yield_receiving_data_shares():
             yield from data_share['shared_fields']
+
+    def yield_records(self):
+        yield from self._yield_helper('/v0.1/records?limit=1000', 'records')
+
+    def yield_partner_records(self):
+        yield from self._yield_helper('/v0.1/partner-records?limit=1000', 'partner_records')

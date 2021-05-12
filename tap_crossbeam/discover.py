@@ -91,18 +91,21 @@ def _add_field_to_metadata(stream, field):
     column_name = field['display_name']
     if column_name not in stream['metadata']:
         stream['metadata'][column_name] = {'inclusion': 'available'}
+    source_id = field['source_id']
+    m_source_ids = stream['metadata']['__table__']['tap-crossbeam.source_ids']
+    if source_id not in m_source_ids:
+        m_source_ids.append(source_id)
 
 
-def _initialize_stream(streams, stream_name, item, default_columns):
+def _initialize_stream(streams, stream_name, item, default_columns, source_id_key):
     if stream_name in streams:
         return
     streams[stream_name] = {
-        'properties': default_columns,
+        'properties': default_columns.copy(),
         'metadata': {
             '__table__': {
-                'tap-crossbeam.schema': item['schema'],
-                'tap-crossbeam.table': item['table'],
-                'tap-crossbeam.mdm_type': item['mdm_type'],
+                'tap-crossbeam.contains_records': True,
+                'tap-crossbeam.source_ids': [item[source_id_key]],
             }
         },
     }
@@ -115,16 +118,18 @@ INTEGER = {'type': ['integer']}
 INTEGER_ARRAY = {'type': 'array', 'items': {'type': 'integer'}}
 STRING_ARRAY = {'type': 'array', 'items': {'type': 'string'}}
 
+RECORDS_STANDARD = {
+    '_crossbeam_id': STRING,
+    '_record_id': STRING,
+    '_updated_at': NULLABLE_DATETIME,
+}
+
 
 def _records_streams(client):
     streams = {}
     for source in client.yield_sources():
         stream_name = source['mdm_type']
-        _initialize_stream(streams, stream_name, source, {
-            '_crossbeam_id': STRING,
-            '_record_id': STRING,
-            '_updated_at': NULLABLE_DATETIME,
-        })
+        _initialize_stream(streams, stream_name, source, RECORDS_STANDARD, 'id')
         for field in source['fields']:
             _add_field_to_properties(streams[stream_name], field)
         for field in source['fields']:
@@ -132,21 +137,25 @@ def _records_streams(client):
     return streams
 
 
+PARTNER_RECORDS_STANDARD = {
+    '_crossbeam_id': STRING,
+    '_partner_crossbeam_id': STRING,
+    '_partner_name': STRING,
+    '_partner_organization_id': INTEGER,
+    '_partner_population_ids': INTEGER_ARRAY,
+    '_partner_population_names': STRING_ARRAY,
+    '_population_ids': INTEGER_ARRAY,
+    '_population_names': STRING_ARRAY,
+    '_record_id': STRING,
+}
+
+
 def _partner_records_streams(client):
     streams = {}
     for shared_field in client.yield_partner_shared_fields():
         stream_name = 'partner_' + shared_field['mdm_type']
-        _initialize_stream(streams, stream_name, shared_field, {
-            '_crossbeam_id': STRING,
-            '_partner_crossbeam_id': STRING,
-            '_partner_name': STRING,
-            '_partner_organization_id': INTEGER,
-            '_partner_population_ids': INTEGER_ARRAY,
-            '_partner_population_names': STRING_ARRAY,
-            '_population_ids': INTEGER_ARRAY,
-            '_population_names': STRING_ARRAY,
-            '_record_id': STRING,
-        })
+        _initialize_stream(streams, stream_name, shared_field,
+                           PARTNER_RECORDS_STANDARD,'source_id')
         _add_field_to_properties(streams[stream_name], shared_field)
         _add_field_to_metadata(streams[stream_name], shared_field)
     return streams
