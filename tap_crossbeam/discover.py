@@ -55,16 +55,16 @@ def get_schemas():
 
 
 def _field_jschema_type(field):
-    # cb_type = field['data_type']
-    # # pg_type = field['pg_data_type']
-    # if cb_type == 'datetime':
-    #     return ('string', 'date-time')
-    # if cb_type == 'number':
-    #     # if pg_type in []:
-    #     #     return ('integer', None)
-    #     return ('number', None)
-    # if cb_type == 'boolean':
-    #     return ('boolean', None)
+    cb_type = field['data_type']
+    pg_type = field['pg_data_type']
+    if cb_type == 'datetime':
+        return ('string', 'date-time')
+    if cb_type == 'number':
+        if pg_type in []:
+            return ('integer', None)
+        return ('number', None)
+    if cb_type == 'boolean':
+        return ('boolean', None)
     return ('string', None)
 
 
@@ -77,7 +77,11 @@ def _add_field_to_properties(stream, field):
     json_type, json_format = _field_jschema_type(field)
     if column_name in stream['properties']:
         if json_type not in stream['properties'][column_name]['type']:
-            stream['properties'][column_name]['type'].append(json_type)
+            # Here we are handling the case when there are multiple different
+            # types for this field. This could happen if, for example, one data
+            # source has a field called 'Number of Employees' which is an
+            # integer and another has 'Number of Employees' which is a string.
+            stream['properties'][column_name]['type'] = ['null', 'string']
     else:
         json_schema = {'type': ['null', json_type]}
         if json_format:
