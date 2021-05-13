@@ -163,6 +163,8 @@ def _initialize_stream(streams, stream_name, item, source_id_key):
 def _records_streams(client):
     streams = {}
     for source in client.yield_sources():
+        if not source['mdm_type']:
+            continue
         stream_name = source['mdm_type']
         _initialize_stream(streams, stream_name, source, 'id')
         fields = [
@@ -179,6 +181,8 @@ def _records_streams(client):
 def _partner_records_streams(client):
     streams = {}
     for shared_field in client.yield_partner_shared_fields():
+        if not shared_field['mdm_type']:
+            continue
         stream_name = 'partner_' + shared_field['mdm_type']
         _initialize_stream(streams, stream_name, shared_field, 'source_id')
         _add_field_to_properties(streams[stream_name], shared_field)
