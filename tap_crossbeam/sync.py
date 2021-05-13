@@ -1,12 +1,8 @@
-import re
-
 import singer
 from singer import metrics, metadata, Transformer
 from singer.bookmarks import set_currently_syncing
-
 from tap_crossbeam.discover import (
-    RECORDS_STANDARD,
-    PARTNER_RECORDS_STANDARD,
+    STANDARD_KEYS,
     discover,
     normalize_name,
 )
@@ -147,6 +143,19 @@ def _source_id_lookup(catalog):
     return lookup
 
 
+def _write_owner(raw_record, user_mdmeta, master_key):
+    record = {}
+    for display_name, value in raw_record[master_key]['owner'].items():
+        # FIXME only do this if the field is selected, right?
+        record[normalize_name(display_name)] = value
+    for field in STANDARD_KEYS[user_mdmeta['stream'].stream]:
+        record[field] = raw_record[field[1:]]
+    with Transformer() as transformer:
+        record_typed = transformer.transform(
+            record, user_mdmeta['schema'], user_mdmeta['metadata'])
+        singer.write_record('user', record_typed)
+
+
 def sync_partner_records(client, catalog, required_streams):
     for stream in catalog.streams:
         if stream.stream in ['partner_account', 'partner_user', 'partner_lead']:
@@ -172,26 +181,13 @@ def sync_partner_records(client, catalog, required_streams):
         for display_name, value in augmented_rec['partner_master']['top_level'].items():
             # FIXME only do this if the field is selected, right?
             record[normalize_name(display_name)] = value
-        for field in PARTNER_RECORDS_STANDARD:
+        for field in STANDARD_KEYS[stream_name]:
             record[field] = augmented_rec[field[1:]]
         with Transformer() as transformer:
             record_typed = transformer.transform(record, mdmeta['schema'], mdmeta['metadata'])
             singer.write_record(stream_name, record_typed)
         if 'owner' in raw_record['partner_master']:
             _write_owner(raw_record, user_mdmeta, 'partner_master')
-
-
-def _write_owner(raw_record, user_mdmeta, master_key):
-    record = {}
-    for display_name, value in raw_record[master_key]['owner'].items():
-        # FIXME only do this if the field is selected, right?
-        record[normalize_name(display_name)] = value
-    # for field in RECORDS_STANDARD:
-    #     record[field] = raw_record[field[1:]]
-    with Transformer() as transformer:
-        record_typed = transformer.transform(
-            record, user_mdmeta['schema'], user_mdmeta['metadata'])
-        singer.write_record('user', record_typed)
 
 
 def sync_records(client, catalog, required_streams):
@@ -210,7 +206,7 @@ def sync_records(client, catalog, required_streams):
         for display_name, value in raw_record['master']['top_level'].items():
             # FIXME only do this if the field is selected, right?
             record[normalize_name(display_name)] = value
-        for field in RECORDS_STANDARD:
+        for field in STANDARD_KEYS[stream_name]:
             record[field] = raw_record[field[1:]]
         with Transformer() as transformer:
             record_typed = transformer.transform(record, mdmeta['schema'], mdmeta['metadata'])
