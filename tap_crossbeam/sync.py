@@ -153,7 +153,7 @@ def _write_owner(raw_record, user_mdmeta, master_key):
     with Transformer() as transformer:
         record_typed = transformer.transform(
             record, user_mdmeta['schema'], user_mdmeta['metadata'])
-        singer.write_record('user', record_typed)
+        singer.write_record(user_mdmeta['stream'].stream, record_typed)
 
 
 def sync_partner_records(client, catalog, required_streams):
@@ -162,8 +162,8 @@ def sync_partner_records(client, catalog, required_streams):
             write_schema(stream)
     partner_lookup = _partner_lookup(client)
     source_id_lookup = _source_id_lookup(catalog)
-    user_stream = next(stream for stream in catalog.streams if stream.stream == 'partner_user')
-    user_mdmeta = _stream_to_meta_and_stream(user_stream)
+    user_stream = next((stream for stream in catalog.streams if stream.stream == 'partner_user'), None)
+    user_mdmeta = _stream_to_meta_and_stream(user_stream) if user_stream else None
     for raw_record in client.yield_partner_records():
         mdmeta = source_id_lookup[raw_record['partner_source_id']]
         stream_name = mdmeta['stream'].stream
@@ -186,7 +186,7 @@ def sync_partner_records(client, catalog, required_streams):
         with Transformer() as transformer:
             record_typed = transformer.transform(record, mdmeta['schema'], mdmeta['metadata'])
             singer.write_record(stream_name, record_typed)
-        if 'owner' in raw_record['partner_master']:
+        if user_mdmeta and 'owner' in raw_record['partner_master']:
             _write_owner(raw_record, user_mdmeta, 'partner_master')
 
 
@@ -194,8 +194,8 @@ def sync_records(client, catalog, required_streams):
     for stream in catalog.streams:
         if stream.stream in ['account', 'user', 'lead']:
             write_schema(stream)
-    user_stream = next(stream for stream in catalog.streams if stream.stream == 'user')
-    user_mdmeta = _stream_to_meta_and_stream(user_stream)
+    user_stream = next((stream for stream in catalog.streams if stream.stream == 'user'), None)
+    user_mdmeta = _stream_to_meta_and_stream(user_stream) if user_stream else None
     source_id_lookup = _source_id_lookup(catalog)
     for raw_record in client.yield_records():
         mdmeta = source_id_lookup[raw_record['source_id']]
@@ -211,7 +211,7 @@ def sync_records(client, catalog, required_streams):
         with Transformer() as transformer:
             record_typed = transformer.transform(record, mdmeta['schema'], mdmeta['metadata'])
             singer.write_record(stream_name, record_typed)
-        if 'owner' in raw_record['master']:
+        if user_mdmeta and 'owner' in raw_record['master']:
             _write_owner(raw_record, user_mdmeta, 'master')
 
 

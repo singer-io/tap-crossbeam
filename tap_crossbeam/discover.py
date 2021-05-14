@@ -142,7 +142,7 @@ STANDARD_KEYS = {
         '_record_id': STRING,
     },
     'partner_user': {
-        '_crossbeam_id': STRING,
+        '_partner_crossbeam_id': STRING,
     },
 }
 
