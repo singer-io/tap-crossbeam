@@ -146,7 +146,6 @@ def _source_id_lookup(catalog):
 def _write_owner(raw_record, user_mdmeta, master_key):
     record = {}
     for display_name, value in raw_record[master_key]['owner'].items():
-        # FIXME only do this if the field is selected, right?
         record[normalize_name(display_name)] = value
     for field in STANDARD_KEYS[user_mdmeta['stream'].stream]:
         record[field] = raw_record[field[1:]]
@@ -179,7 +178,6 @@ def sync_partner_records(client, catalog, required_streams):
         }
         record = {}
         for display_name, value in augmented_rec['partner_master']['top_level'].items():
-            # FIXME only do this if the field is selected, right?
             record[normalize_name(display_name)] = value
         for field in STANDARD_KEYS[stream_name]:
             record[field] = augmented_rec[field[1:]]
@@ -204,7 +202,6 @@ def sync_records(client, catalog, required_streams):
             continue
         record = {}
         for display_name, value in raw_record['master']['top_level'].items():
-            # FIXME only do this if the field is selected, right?
             record[normalize_name(display_name)] = value
         for field in STANDARD_KEYS[stream_name]:
             record[field] = raw_record[field[1:]]
@@ -216,11 +213,11 @@ def sync_records(client, catalog, required_streams):
 
 
 def sync(client, _, catalog, state):
-    if not catalog:
+    if catalog:
+        selected_streams = catalog.get_selected_streams(state)
+    else:
         catalog = discover(client)
         selected_streams = catalog.streams
-    else:
-        selected_streams = catalog.get_selected_streams(state)
 
     selected_stream_names = []
     for selected_stream in selected_streams:
@@ -243,5 +240,6 @@ def sync(client, _, catalog, state):
     # records data streams are interlaced, so we just call this stage "records"
     update_current_stream(state, 'records')
     sync_records(client, catalog, selected_stream_names)
+    update_current_stream(state, 'partner_records')
     sync_partner_records(client, catalog, selected_stream_names)
     update_current_stream(state)

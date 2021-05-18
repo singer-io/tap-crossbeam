@@ -150,14 +150,17 @@ STANDARD_KEYS = {
 def _initialize_stream(streams, stream_name, item, source_id_key):
     if stream_name in streams:
         return
+    standard = STANDARD_KEYS.get(stream_name, {}).copy()
     streams[stream_name] = {
-        'properties': STANDARD_KEYS.get(stream_name, {}).copy(),
+        'properties': standard,
         'metadata': {
             '__table__': {
                 'tap-crossbeam.source_ids': [item[source_id_key]],
             }
         },
     }
+    for column_name in standard:
+        streams[stream_name]['metadata'][column_name] = {'inclusion': 'automatic'}
 
 
 def _records_streams(client):
