@@ -114,14 +114,6 @@ def _write_records_and_metrics(stream_name, schema, page_records):
                 counter.increment()
 
 
-def _partner_lookup(client):
-    partners_response = client.request('GET', path='/v0.1/partners', endpoint='partners')
-    partner_lookup = {}
-    for partner in partners_response['partner_orgs']:
-        partner_lookup[partner['id']] = partner['name']
-    return partner_lookup
-
-
 def _stream_to_meta_and_stream(stream):
     return {
         'metadata': metadata.to_map(stream.metadata),
@@ -130,16 +122,13 @@ def _stream_to_meta_and_stream(stream):
     }
 
 
-def _source_id_lookup(catalog):
-    """Returns a mapping of source ids to the stream for that source."""
+def _stream_lookup(catalog):
+    """Returns a mapping of stream names to the stream and metadata for that
+    stream."""
     lookup = {}
     for stream in catalog.streams:
         meta_and_stream = _stream_to_meta_and_stream(stream)
-        mdata = meta_and_stream['metadata']
-        table_mdata = mdata.get(tuple())
-        if table_mdata and table_mdata.get('tap-crossbeam.source_ids'):
-            for source_id in table_mdata['tap-crossbeam.source_ids']:
-                lookup[source_id] = meta_and_stream
+        lookup[stream.stream] = meta_and_stream
     return lookup
 
 
@@ -159,12 +148,15 @@ def sync_partner_records(client, catalog, required_streams):
     for stream in catalog.streams:
         if stream.stream in ['partner_account', 'partner_user', 'partner_lead']:
             write_schema(stream)
-    partner_lookup = _partner_lookup(client)
-    source_id_lookup = _source_id_lookup(catalog)
+    partner_lookup = {x['id']: x for x in client.yield_partners()}
+    stream_lookup = _stream_lookup(catalog)
     user_stream = next((stream for stream in catalog.streams if stream.stream == 'partner_user'), None)
     user_mdmeta = _stream_to_meta_and_stream(user_stream) if user_stream else None
     for raw_record in client.yield_partner_records():
-        mdmeta = source_id_lookup[raw_record['partner_source_id']]
+        if 'mdm_type' in raw_record:
+            # FIXME remove once route is updated
+            raw_record['partner_mdm_type'] = raw_record['mdm_type']
+        mdmeta = stream_lookup['partner_' + raw_record['partner_mdm_type']]
         stream_name = mdmeta['stream'].stream
         if stream_name not in required_streams:
             continue
@@ -194,9 +186,11 @@ def sync_records(client, catalog, required_streams):
             write_schema(stream)
     user_stream = next((stream for stream in catalog.streams if stream.stream == 'user'), None)
     user_mdmeta = _stream_to_meta_and_stream(user_stream) if user_stream else None
-    source_id_lookup = _source_id_lookup(catalog)
+    source_lookup = {x['id']: x for x in client.yield_sources()}
+    stream_lookup = _stream_lookup(catalog)
     for raw_record in client.yield_records():
-        mdmeta = source_id_lookup[raw_record['source_id']]
+        source = source_lookup[raw_record['source_id']]
+        mdmeta = stream_lookup[source['mdm_type']]
         stream_name = mdmeta['stream'].stream
         if stream_name not in required_streams:
             continue

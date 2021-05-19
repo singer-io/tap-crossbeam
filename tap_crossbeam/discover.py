@@ -93,10 +93,6 @@ def _add_field_to_metadata(stream, field):
     column_name = normalize_name(field['display_name'])
     if column_name not in stream['metadata']:
         stream['metadata'][column_name] = {'inclusion': 'available'}
-    source_id = field['source_id']
-    m_source_ids = stream['metadata']['__table__']['tap-crossbeam.source_ids']
-    if source_id not in m_source_ids:
-        m_source_ids.append(source_id)
 
 
 STRING = {'type': ['string']}
@@ -147,17 +143,13 @@ STANDARD_KEYS = {
 }
 
 
-def _initialize_stream(streams, stream_name, item, source_id_key):
+def _initialize_stream(streams, stream_name):
     if stream_name in streams:
         return
     standard = STANDARD_KEYS.get(stream_name, {}).copy()
     streams[stream_name] = {
         'properties': standard,
-        'metadata': {
-            '__table__': {
-                'tap-crossbeam.source_ids': [item[source_id_key]],
-            }
-        },
+        'metadata': {'__table__': {}},
     }
     for column_name in standard:
         streams[stream_name]['metadata'][column_name] = {'inclusion': 'automatic'}
@@ -169,7 +161,7 @@ def _records_streams(client):
         if not source['mdm_type']:
             continue
         stream_name = source['mdm_type']
-        _initialize_stream(streams, stream_name, source, 'id')
+        _initialize_stream(streams, stream_name)
         fields = [
             field for field in source['fields']
             if field['is_primary_key'] or field['is_visible'] or field['is_filterable']
@@ -187,7 +179,7 @@ def _partner_records_streams(client):
         if not shared_field['mdm_type']:
             continue
         stream_name = 'partner_' + shared_field['mdm_type']
-        _initialize_stream(streams, stream_name, shared_field, 'source_id')
+        _initialize_stream(streams, stream_name)
         _add_field_to_properties(streams[stream_name], shared_field)
         _add_field_to_metadata(streams[stream_name], shared_field)
     return streams

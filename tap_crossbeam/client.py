@@ -143,3 +143,6 @@ class CrossbeamClient(object):
 
     def yield_partner_records(self):
         yield from self._yield_helper('/v0.1/partner-records?limit=1000', 'partner_records')
+
+    def yield_partners(self):
+        yield from self._yield_helper('/v0.1/partners', 'partners', items_key='partner_orgs')
