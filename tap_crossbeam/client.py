@@ -27,6 +27,7 @@ class CrossbeamClient(object):
         self.__auth_base_url = config.get('auth_base_url', self.DEFAULT_AUTH_BASE_URL)
         self.__config_path = config_path
         self.__verify_ssl_certs = config.get('verify_ssl_certs', True)
+        self.__default_headers = {'X-Requested-With': 'stitch'}
 
         self.__session = requests.Session()
         self.__access_token = None
@@ -72,6 +73,8 @@ class CrossbeamClient(object):
                 **kwargs):
         if 'headers' not in kwargs:
             kwargs['headers'] = {}
+        for header, value in self.__default_headers.items():
+            kwargs['headers'][header] = value
 
         if not skip_auth:
             if not self.__access_token:
