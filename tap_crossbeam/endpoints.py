@@ -13,22 +13,6 @@ ENDPOINTS_CONFIG = {
         'path': '/v0.1/populations',
         'pk': ['id']
     },
-    'reports': {
-        'path': '/v0.2/reports',
-        'pk': ['id'],
-        'provides': {
-            'report_id': ['id']
-        },
-        'children': {
-            'reports_data': {
-                'path': '/v0.1/reports/{report_id}/data',
-                'pk': ['master_id'],
-                'params': {
-                    'limit': 100
-                }
-            }
-        }
-    },
     'threads': {
         'path': '/v0.1/threads',
         'pk': ['id'],

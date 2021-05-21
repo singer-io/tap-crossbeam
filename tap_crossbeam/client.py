@@ -26,6 +26,8 @@ class CrossbeamClient(object):
         self.__base_url = config.get('base_url', self.DEFAULT_BASE_URL)
         self.__auth_base_url = config.get('auth_base_url', self.DEFAULT_AUTH_BASE_URL)
         self.__config_path = config_path
+        self.__verify_ssl_certs = config.get('verify_ssl_certs', True)
+        self.__default_headers = {'X-Requested-With': 'stitch'}
 
         self.__session = requests.Session()
         self.__access_token = None
@@ -54,13 +56,6 @@ class CrossbeamClient(object):
         self.__user_expires_at = datetime.utcnow() + \
             timedelta(seconds=data['expires_in'] - 10) # pad by 10 seconds for clock drift
 
-        ## Update refresh token in config file
-        with open(self.__config_path) as file:
-            config = json.load(file)
-        config['refresh_token'] = self.__refresh_token
-        with open(self.__config_path, 'w') as file:
-            json.dump(config, file, indent=2)
-
     @backoff.on_exception(backoff.expo,
                           (Server5xxError,
                            RateLimitException,
@@ -78,6 +73,8 @@ class CrossbeamClient(object):
                 **kwargs):
         if 'headers' not in kwargs:
             kwargs['headers'] = {}
+        for header, value in self.__default_headers.items():
+            kwargs['headers'][header] = value
 
         if not skip_auth:
             if not self.__access_token:
@@ -93,6 +90,8 @@ class CrossbeamClient(object):
 
         if self.__user_agent:
             kwargs['headers']['User-Agent'] = self.__user_agent
+
+        kwargs['verify'] = self.__verify_ssl_certs
 
         if not url:
             url = self.__base_url + path
@@ -110,3 +109,40 @@ class CrossbeamClient(object):
 
     def get(self, path, **kwargs):
         return self.request('GET', path=path, **kwargs)
+
+    def _yield_helper(self, path, endpoint, *, items_key='items'):
+        next_href = None
+        while path or next_href:
+            LOGGER.debug('%s - Fetching %s', endpoint, path or next_href)
+            data = self.get(path, url=next_href, endpoint=endpoint)
+            yield from data[items_key]
+            path = None
+            next_href = data.get('pagination', {}).get('next_href')
+
+    def yield_sources(self):
+        yield from self._yield_helper('/v0.1/sources', 'sources')
+
+    def yield_receiving_data_shares(self):
+        yield from self._yield_helper('/v0.1/data-shares', 'data_shares',
+                                      items_key='receiving_data_shares')
+
+    def yield_partner_shared_fields(self):
+        # Yep, for more specifics on that endpoint, for /partner-records
+        # fields, pull from /v0.1/data-shares , receiving_data_shares key.
+        # Within that, you will see a list of items, each of which has a
+        # shared_fields key. In there, pull all the display_name fields by
+        # mdm_type (same rules as for /records, lead and account map to
+        # top_level, user maps to owner, anything can be ignored). Do note that
+        # you will see a lot of duplicates here, so you’ll want to distinct
+        # these all together. This will be in prod in the next hour.
+        for data_share in self.yield_receiving_data_shares():
+            yield from data_share['shared_fields']
+
+    def yield_records(self):
+        yield from self._yield_helper('/v0.1/records?limit=1000', 'records')
+
+    def yield_partner_records(self):
+        yield from self._yield_helper('/v0.1/partner-records?limit=1000', 'partner_records')
+
+    def yield_partners(self):
+        yield from self._yield_helper('/v0.1/partners', 'partners', items_key='partner_orgs')

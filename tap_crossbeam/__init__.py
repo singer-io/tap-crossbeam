@@ -14,6 +14,7 @@ from tap_crossbeam.sync import sync
 LOGGER = singer.get_logger()
 
 REQUIRED_CONFIG_KEYS = [
+    'organization_uuid'
 ]
 
 def do_discover(client):
@@ -24,7 +25,7 @@ def do_discover(client):
         raise Exception('Error could not authenticate with Crossbeam')
 
     LOGGER.info('Starting discover')
-    catalog = discover()
+    catalog = discover(client)
     json.dump(catalog.to_dict(), sys.stdout, indent=2)
     LOGGER.info('Finished discover')
 
