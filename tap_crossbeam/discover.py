@@ -160,6 +160,8 @@ def _records_streams(client):
     for source in client.yield_sources():
         if not source['mdm_type']:
             continue
+        if source['mdm_type'] not in ['account', 'lead', 'user']:
+            continue
         stream_name = source['mdm_type']
         _initialize_stream(streams, stream_name)
         fields = [
@@ -177,6 +179,8 @@ def _partner_records_streams(client):
     streams = {}
     for shared_field in client.yield_partner_shared_fields():
         if not shared_field['mdm_type']:
+            continue
+        if shared_field['mdm_type'] not in ['account', 'lead', 'user']:
             continue
         stream_name = 'partner_' + shared_field['mdm_type']
         _initialize_stream(streams, stream_name)
