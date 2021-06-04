@@ -141,6 +141,14 @@ STANDARD_KEYS = {
         '_partner_crossbeam_id': STRING,
     },
 }
+PRIMARY_KEYS = {
+    'account': ['_crossbeam_id'],
+    'lead': ['_crossbeam_id'],
+    'user': ['_crossbeam_id'],
+    'partner_account': ['_crossbeam_id', '_partner_crossbeam_id'],
+    'partner_lead': ['_crossbeam_id', '_partner_crossbeam_id'],
+    'partner_user': ['_partner_crossbeam_id'],
+}
 
 
 def _initialize_stream(streams, stream_name):
@@ -234,7 +242,7 @@ def discover(client):
             catalog.streams.append(CatalogEntry(
                 stream=stream_name,
                 tap_stream_id=stream_name,
-                key_properties=['_crossbeam_id'],
+                key_properties=PRIMARY_KEYS[stream_name],
                 schema=schema,
                 metadata=metadata
             ))
