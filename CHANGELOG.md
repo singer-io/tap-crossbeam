@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.3.0
+  * Updated primary keys [#6](https://github.com/singer-io/tap-crossbeam/pull/6)
+
 ## 0.2.0
   * Don't create streams for unsupported sources [#4](https://github.com/singer-io/tap-crossbeam/pull/4)
 
