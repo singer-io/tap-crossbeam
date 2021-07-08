@@ -1,6 +1,6 @@
 import singer
 from singer import metrics, metadata, Transformer
-from singer.bookmarks import set_currently_syncing
+import singer.bookmarks as books
 from tap_crossbeam.discover import (
     STANDARD_KEYS,
     discover,
@@ -22,13 +22,6 @@ def nested_get(dic, path):
 
 def get_bookmark(state, stream_name, default):
     return state.get('bookmarks', {}).get(stream_name, default)
-
-
-def write_bookmark(state, stream_name, value):
-    if 'bookmarks' not in state:
-        state['bookmarks'] = {}
-    state['bookmarks'][stream_name] = value
-    singer.write_state(state)
 
 
 def write_schema(stream):
@@ -87,7 +80,7 @@ def sync_endpoint(client,
 
 
 def update_current_stream(state, stream_name=None):
-    set_currently_syncing(state, stream_name)
+    books.set_currently_syncing(state, stream_name)
     singer.write_state(state)
 
 
@@ -144,7 +137,7 @@ def _write_owner(raw_record, user_mdmeta, master_key):
         singer.write_record(user_mdmeta['stream'].stream, record_typed)
 
 
-def sync_partner_records(client, catalog, required_streams):
+def sync_partner_records(client, catalog, required_streams, state):
     for stream in catalog.streams:
         if stream.stream in ['partner_account', 'partner_user', 'partner_lead']:
             write_schema(stream)
@@ -152,7 +145,13 @@ def sync_partner_records(client, catalog, required_streams):
     stream_lookup = _stream_lookup(catalog)
     user_stream = next((stream for stream in catalog.streams if stream.stream == 'partner_user'), None)
     user_mdmeta = _stream_to_meta_and_stream(user_stream) if user_stream else None
+    max_overlap_time = ''
+    book_overlap_time = books.get_bookmark(state, 'partner_records', 'overlap_time', '')
     for raw_record in client.yield_partner_records():
+        overlap_time = raw_record['overlap_time'] or ''
+        if overlap_time and overlap_time < book_overlap_time:
+            continue
+        max_overlap_time = overlap_time if overlap_time > max_overlap_time else max_overlap_time
         if 'mdm_type' in raw_record:
             # FIXME remove once route is updated
             raw_record['partner_mdm_type'] = raw_record['mdm_type']
@@ -178,9 +177,11 @@ def sync_partner_records(client, catalog, required_streams):
             singer.write_record(stream_name, record_typed)
         if user_mdmeta and 'owner' in raw_record['partner_master']:
             _write_owner(raw_record, user_mdmeta, 'partner_master')
+    books.write_bookmark(state, 'partner_records', 'overlap_time', max_overlap_time)
+    singer.write_state(state)
 
 
-def sync_records(client, catalog, required_streams):
+def sync_records(client, catalog, required_streams, state):
     for stream in catalog.streams:
         if stream.stream in ['account', 'user', 'lead']:
             write_schema(stream)
@@ -188,7 +189,13 @@ def sync_records(client, catalog, required_streams):
     user_mdmeta = _stream_to_meta_and_stream(user_stream) if user_stream else None
     source_lookup = {x['id']: x for x in client.yield_sources()}
     stream_lookup = _stream_lookup(catalog)
+    max_updated_at = ''
+    book_updated_at = books.get_bookmark(state, 'records', 'updated_at', '')
     for raw_record in client.yield_records():
+        updated_at = raw_record['updated_at']
+        if updated_at < book_updated_at:
+            continue
+        max_updated_at = updated_at if updated_at > max_updated_at else max_updated_at
         source = source_lookup[raw_record['source_id']]
         mdmeta = stream_lookup[source['mdm_type']]
         stream_name = mdmeta['stream'].stream
@@ -204,6 +211,8 @@ def sync_records(client, catalog, required_streams):
             singer.write_record(stream_name, record_typed)
         if user_mdmeta and 'owner' in raw_record['master']:
             _write_owner(raw_record, user_mdmeta, 'master')
+    books.write_bookmark(state, 'records', 'updated_at', max_updated_at)
+    singer.write_state(state)
 
 
 def sync(client, _, catalog, state):
@@ -212,14 +221,17 @@ def sync(client, _, catalog, state):
     else:
         catalog = discover(client)
         selected_streams = catalog.streams
-
+    currently_syncing = books.get_currently_syncing(state)
     selected_stream_names = []
-    for selected_stream in selected_streams:
+    for selected_stream in sorted(selected_streams, key=lambda s: s.tap_stream_id):
         selected_stream_names.append(selected_stream.tap_stream_id)
-
     required_endpoint_streams = get_required_streams(ENDPOINTS_CONFIG, selected_stream_names)
-
     for stream_name, endpoint in ENDPOINTS_CONFIG.items():
+        if currently_syncing:
+            if currently_syncing == stream_name:
+                currently_syncing = None
+            else:
+                continue
         if stream_name in required_endpoint_streams:
             update_current_stream(state, stream_name)
             sync_endpoint(client,
@@ -230,10 +242,13 @@ def sync(client, _, catalog, state):
                           stream_name,
                           endpoint,
                           {})
-
     # records data streams are interlaced, so we just call this stage "records"
-    update_current_stream(state, 'records')
-    sync_records(client, catalog, selected_stream_names)
-    update_current_stream(state, 'partner_records')
-    sync_partner_records(client, catalog, selected_stream_names)
+    if not currently_syncing or currently_syncing == 'records':
+        currently_syncing = None
+        update_current_stream(state, 'records')
+        sync_records(client, catalog, selected_stream_names, state)
+    if not currently_syncing or currently_syncing == 'partner_records':
+        currently_syncing = None
+        update_current_stream(state, 'partner_records')
+        sync_partner_records(client, catalog, selected_stream_names, state)
     update_current_stream(state)
