@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.0
+  * Implements bookmarking [#8](https://github.com/singer-io/tap-crossbeam/pull/8)
+
 ## 0.3.0
   * Updated primary keys [#6](https://github.com/singer-io/tap-crossbeam/pull/6)
 
