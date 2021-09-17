@@ -13,6 +13,13 @@ setup(name='tap-crossbeam',
           'requests>2',
           'singer-python>5'
       ],
+      extras_require={
+          'dev': [
+              'pylint',
+              'ipdb',
+              'nose',
+          ]
+      },
       entry_points='''
           [console_scripts]
           tap-crossbeam=tap_crossbeam:main
