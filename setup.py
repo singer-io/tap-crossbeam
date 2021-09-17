@@ -14,10 +14,12 @@ setup(name='tap-crossbeam',
           'singer-python>5'
       ],
       extras_require={
-          'dev': [
+          'test': [
               'pylint',
-              'ipdb',
               'nose',
+          ],
+          'dev': [
+              'ipdb',
           ]
       },
       entry_points='''

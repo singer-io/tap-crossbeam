@@ -14,7 +14,7 @@ jobs:
             python3 -mvenv /usr/local/share/virtualenvs/tap-crossbeam
             source /usr/local/share/virtualenvs/tap-crossbeam/bin/activate
             pip install -U pip setuptools
-            pip install .[dev]
+            pip install .[test]
       - run:
           name: 'JSON Validator'
           command: |
