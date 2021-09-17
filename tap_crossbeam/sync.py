@@ -143,7 +143,8 @@ def sync_partner_records(client, catalog, required_streams, state):
             write_schema(stream)
     partner_lookup = {x['id']: x for x in client.yield_partners()}
     stream_lookup = _stream_lookup(catalog)
-    user_stream = next((stream for stream in catalog.streams if stream.stream == 'partner_user'), None)
+    user_stream = next((stream for stream in catalog.streams if stream.stream == 'partner_user'),
+                       None)
     user_mdmeta = _stream_to_meta_and_stream(user_stream) if user_stream else None
     max_overlap_time = ''
     book_overlap_time = books.get_bookmark(state, 'partner_records', 'overlap_time', '')

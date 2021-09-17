@@ -1,4 +1,3 @@
-import json
 from datetime import datetime, timedelta
 
 import backoff
@@ -6,14 +5,14 @@ import requests
 import singer
 from singer import metrics
 from ratelimit import limits, sleep_and_retry, RateLimitException
-from requests.exceptions import ConnectionError, Timeout
+from requests.exceptions import Timeout
 
 LOGGER = singer.get_logger()
 
 class Server5xxError(Exception):
     pass
-
-class CrossbeamClient(object):
+# pylint: disable=too-many-instance-attributes
+class CrossbeamClient():
     DEFAULT_BASE_URL = 'https://api.crossbeam.com'
     DEFAULT_AUTH_BASE_URL = 'https://auth.crossbeam.com'
 
@@ -31,12 +30,12 @@ class CrossbeamClient(object):
 
         self.__session = requests.Session()
         self.__access_token = None
-        self.__expires_at = None
+        self.__user_expires_at = None
 
     def __enter__(self):
         return self
 
-    def __exit__(self, type, value, traceback):
+    def __exit__(self, exit_type, value, traceback):
         self.__session.close()
 
     def refresh_access_token(self):
@@ -59,7 +58,7 @@ class CrossbeamClient(object):
     @backoff.on_exception(backoff.expo,
                           (Server5xxError,
                            RateLimitException,
-                           ConnectionError,
+                           requests.exceptions.ConnectionError,
                            Timeout),
                           max_tries=5,
                           factor=3)

@@ -6,9 +6,6 @@ from singer.catalog import Catalog, CatalogEntry, Schema
 
 from tap_crossbeam.endpoints import ENDPOINTS_CONFIG
 
-SCHEMAS = {}
-FIELD_METADATA = {}
-
 
 def get_pk(stream_name, endpoints=None):
     if not endpoints:
@@ -28,9 +25,9 @@ def get_abs_path(path):
 
 
 def get_schemas():
-    global SCHEMAS, FIELD_METADATA
-    if SCHEMAS:
-        return SCHEMAS, FIELD_METADATA
+    schemas = {}
+    field_metadata = {}
+
     schemas_path = get_abs_path('schemas')
     file_names = [f for f in os.listdir(schemas_path)
                   if os.path.isfile(os.path.join(schemas_path, f))]
@@ -38,7 +35,7 @@ def get_schemas():
         stream_name = file_name[:-5]
         with open(os.path.join(schemas_path, file_name)) as data_file:
             schema = json.load(data_file)
-        SCHEMAS[stream_name] = schema
+        schemas[stream_name] = schema
         pk = get_pk(stream_name)
         metadata = []
         for prop, _ in schema['properties'].items():
@@ -50,8 +47,8 @@ def get_schemas():
                 'metadata': {'inclusion': inclusion},
                 'breadcrumb': ['properties', prop],
             })
-        FIELD_METADATA[stream_name] = metadata
-    return SCHEMAS, FIELD_METADATA
+        field_metadata[stream_name] = metadata
+    return schemas, field_metadata
 
 
 def _field_jschema_type(field):

@@ -11,28 +11,20 @@ jobs:
       - run:
           name: 'Setup virtual env'
           command: |
-            python3 -mvenv /usr/local/share/virtualenvs/tap-tap-crossbeam
-            source /usr/local/share/virtualenvs/tap-tap-crossbeam/bin/activate
+            python3 -mvenv /usr/local/share/virtualenvs/tap-crossbeam
+            source /usr/local/share/virtualenvs/tap-crossbeam/bin/activate
             pip install -U pip setuptools
             pip install .[dev]
       - run:
           name: 'JSON Validator'
           command: |
             source /usr/local/share/virtualenvs/tap-tester/bin/activate
-            stitch-validate-json tap_tap-crossbeam/schemas/*.json
+            stitch-validate-json tap_crossbeam/schemas/*.json
       - run:
           name: 'pylint'
           command: |
-            source /usr/local/share/virtualenvs/tap-tap-crossbeam/bin/activate
-            pylint tap_tap-crossbeam --disable 'broad-except,chained-comparison,empty-docstring,fixme,invalid-name,line-too-long,missing-class-docstring,missing-function-docstring,missing-module-docstring,no-else-raise,no-else-return,too-few-public-methods,too-many-arguments,too-many-branches,too-many-lines,too-many-locals,ungrouped-imports,wrong-spelling-in-comment,wrong-spelling-in-docstring,bad-whitespace'
-      - run:
-          name: 'Integration Tests'
-          command: |
-            aws s3 cp s3://com-stitchdata-dev-deployment-assets/environments/tap-tester/tap_tester_sandbox dev_env.sh
-            source dev_env.sh
-            source /usr/local/share/virtualenvs/tap-tester/bin/activate
-            pip install .[dev,test] # Install tap for the test client subclass usage
-            run-test --tap=tap-tap-crossbeam tests
+            source /usr/local/share/virtualenvs/tap-crossbeam/bin/activate
+            pylint tap_crossbeam --disable 'broad-except,chained-comparison,empty-docstring,fixme,invalid-name,line-too-long,missing-class-docstring,missing-function-docstring,missing-module-docstring,no-else-raise,no-else-return,too-few-public-methods,too-many-arguments,too-many-branches,too-many-lines,too-many-locals,ungrouped-imports,wrong-spelling-in-comment,wrong-spelling-in-docstring,bad-whitespace'
       - slack/status:
           channel: 'stitch-tap-tester-tests'
           mentions: "${CIRCLE_USERNAME}"
