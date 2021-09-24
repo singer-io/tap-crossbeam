@@ -27,7 +27,6 @@ class CrossbeamClient():
 
         self.__session = requests.Session()
         self.__access_token = None
-        #self.__user_expires_at = None
 
     def __enter__(self):
         return self
@@ -48,9 +47,6 @@ class CrossbeamClient():
             skip_auth=True)
 
         self.__access_token = data['access_token']
-
-        #self.__user_expires_at = datetime.utcnow() + \
-        #    timedelta(seconds=data['expires_in'] - 10) # pad by 10 seconds for clock drift
 
     @backoff.on_exception(backoff.expo,
                           (Server5xxError,
