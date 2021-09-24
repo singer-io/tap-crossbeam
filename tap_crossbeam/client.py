@@ -1,23 +1,20 @@
-import json
-from datetime import datetime, timedelta
-
 import backoff
 import requests
 import singer
 from singer import metrics
 from ratelimit import limits, sleep_and_retry, RateLimitException
-from requests.exceptions import ConnectionError, Timeout
+from requests.exceptions import Timeout
 
 LOGGER = singer.get_logger()
 
 class Server5xxError(Exception):
     pass
-
-class CrossbeamClient(object):
+# pylint: disable=too-many-instance-attributes
+class CrossbeamClient():
     DEFAULT_BASE_URL = 'https://api.crossbeam.com'
     DEFAULT_AUTH_BASE_URL = 'https://auth.crossbeam.com'
 
-    def __init__(self, config, config_path):
+    def __init__(self, config):
         self.__user_agent = config.get('user_agent')
         self.__organization_uuid = config.get('organization_uuid')
         self.__client_id = config.get('client_id')
@@ -25,24 +22,22 @@ class CrossbeamClient(object):
         self.__refresh_token = config.get('refresh_token')
         self.__base_url = config.get('base_url', self.DEFAULT_BASE_URL)
         self.__auth_base_url = config.get('auth_base_url', self.DEFAULT_AUTH_BASE_URL)
-        self.__config_path = config_path
         self.__verify_ssl_certs = config.get('verify_ssl_certs', True)
         self.__default_headers = {'X-Requested-With': 'stitch'}
 
         self.__session = requests.Session()
         self.__access_token = None
-        self.__expires_at = None
 
     def __enter__(self):
         return self
 
-    def __exit__(self, type, value, traceback):
+    def __exit__(self, exit_type, value, traceback):
         self.__session.close()
 
     def refresh_access_token(self):
         data = self.request(
             'POST',
-            url='{}/oauth/token'.format(self.__auth_base_url),
+            url=f'{self.__auth_base_url}/oauth/token',
             data={
                 'client_id': self.__client_id,
                 'client_secret': self.__client_secret,
@@ -53,13 +48,10 @@ class CrossbeamClient(object):
 
         self.__access_token = data['access_token']
 
-        self.__user_expires_at = datetime.utcnow() + \
-            timedelta(seconds=data['expires_in'] - 10) # pad by 10 seconds for clock drift
-
     @backoff.on_exception(backoff.expo,
                           (Server5xxError,
                            RateLimitException,
-                           ConnectionError,
+                           requests.exceptions.ConnectionError,
                            Timeout),
                           max_tries=5,
                           factor=3)
@@ -79,7 +71,7 @@ class CrossbeamClient(object):
         if not skip_auth:
             if not self.__access_token:
                 self.refresh_access_token()
-            kwargs['headers']['Authorization'] = 'Bearer {}'.format(self.__access_token)
+            kwargs['headers']['Authorization'] = f'Bearer {self.__access_token}'
             kwargs['headers']['Xbeam-Organization'] = self.__organization_uuid
 
         if 'endpoint' in kwargs:

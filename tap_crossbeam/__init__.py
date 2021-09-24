@@ -21,8 +21,8 @@ def do_discover(client):
     LOGGER.info('Testing authentication')
     try:
         client.get('/v0.1/users/me')
-    except:
-        raise Exception('Error could not authenticate with Crossbeam')
+    except Exception as exc:
+        raise Exception('Error could not authenticate with Crossbeam') from exc
 
     LOGGER.info('Starting discover')
     catalog = discover(client)
@@ -33,7 +33,7 @@ def do_discover(client):
 def main():
     parsed_args = singer.utils.parse_args(REQUIRED_CONFIG_KEYS)
 
-    with CrossbeamClient(parsed_args.config, parsed_args.config_path) as client:
+    with CrossbeamClient(parsed_args.config) as client:
         if parsed_args.discover:
             do_discover(client)
         else:
