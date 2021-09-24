@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.1
+  * Added circleci [#10](https://github.com/singer-io/tap-crossbeam/pull/10)
+
 ## 0.4.0
   * Implements bookmarking [#8](https://github.com/singer-io/tap-crossbeam/pull/8)
 
