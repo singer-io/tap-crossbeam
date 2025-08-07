@@ -5,16 +5,16 @@ orbs:
 jobs:
   build:
     docker:
-      - image: 218546966473.dkr.ecr.us-east-1.amazonaws.com/circle-ci:stitch-tap-tester
+      - image: 218546966473.dkr.ecr.us-east-1.amazonaws.com/circle-ci:stitch-tap-tester-uv
     steps:
       - checkout
       - run:
           name: 'Setup virtual env'
           command: |
-            python3 -mvenv /usr/local/share/virtualenvs/tap-crossbeam
+            uv venv --python 3.9 /usr/local/share/virtualenvs/tap-crossbeam
             source /usr/local/share/virtualenvs/tap-crossbeam/bin/activate
-            pip install -U pip setuptools
-            pip install .[test]
+            uv pip install -U pip setuptools
+            uv pip install .[test]
       - run:
           name: 'JSON Validator'
           command: |
@@ -24,7 +24,7 @@ jobs:
           name: 'pylint'
           command: |
             source /usr/local/share/virtualenvs/tap-crossbeam/bin/activate
-            pylint tap_crossbeam --disable 'broad-except,chained-comparison,empty-docstring,fixme,invalid-name,line-too-long,missing-class-docstring,missing-function-docstring,missing-module-docstring,no-else-raise,no-else-return,too-few-public-methods,too-many-arguments,too-many-branches,too-many-lines,too-many-locals,ungrouped-imports,wrong-spelling-in-comment,wrong-spelling-in-docstring,bad-whitespace'
+            pylint tap_crossbeam --disable 'broad-except,chained-comparison,empty-docstring,fixme,invalid-name,line-too-long,missing-class-docstring,missing-function-docstring,missing-module-docstring,no-else-raise,no-else-return,too-few-public-methods,too-many-arguments,too-many-branches,too-many-lines,too-many-locals,ungrouped-imports,wrong-spelling-in-comment,wrong-spelling-in-docstring,broad-exception-raised,too-many-positional-arguments'
       - slack/status:
           channel: 'stitch-tap-tester-tests'
           mentions: "${CIRCLE_USERNAME}"
