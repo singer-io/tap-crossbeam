@@ -3,15 +3,15 @@
 from setuptools import setup
 
 setup(name='tap-crossbeam',
-      version='0.4.1',
+      version='1.0.0',
       description='Singer.io tap for extracting data from the Crossbeam API',
       classifiers=['Programming Language :: Python :: 3 :: Only'],
       py_modules=['tap_crossbeam'],
       install_requires=[
-          'backoff==1.8.0', # needs to be pinned because of singer dependencies
-          'ratelimit>2',
-          'requests>2',
-          'singer-python>5'
+          'backoff==2.2.1', # needs to be pinned because of singer dependencies
+          'ratelimit==2.2.1',
+          'requests==2.32.4',
+          'singer-python==6.3.0',
       ],
       extras_require={
           'test': [
