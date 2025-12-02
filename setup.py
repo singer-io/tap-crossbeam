@@ -3,7 +3,7 @@
 from setuptools import setup
 
 setup(name='tap-crossbeam',
-      version='1.0.0',
+      version='0.5.0',
       description='Singer.io tap for extracting data from the Crossbeam API',
       classifiers=['Programming Language :: Python :: 3 :: Only'],
       py_modules=['tap_crossbeam'],

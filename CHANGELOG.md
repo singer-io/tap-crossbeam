@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.0
+## 0.5.0
   * Update libraries [#13](https://github.com/singer-io/tap-crossbeam/pull/13)
 
 ## 0.4.1
