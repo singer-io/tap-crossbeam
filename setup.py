@@ -10,7 +10,7 @@ setup(name='tap-crossbeam',
       install_requires=[
           'backoff==2.2.1', # needs to be pinned because of singer dependencies
           'ratelimit==2.2.1',
-          'requests==2.32.4',
+          'requests==2.32.5',
           'singer-python==6.3.0',
       ],
       extras_require={
