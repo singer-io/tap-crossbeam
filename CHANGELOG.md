@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.5.0
+  * Update libraries [#13](https://github.com/singer-io/tap-crossbeam/pull/13)
+
 ## 0.4.1
   * Added circleci [#10](https://github.com/singer-io/tap-crossbeam/pull/10)
 
